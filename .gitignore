@@ -1,0 +1,8 @@
+# dir
+out/
+proj/.vs/
+
+# vsfiles
+*.vcxproj.filters
+*.vcxproj.user
+*.vcxproj.*.user
