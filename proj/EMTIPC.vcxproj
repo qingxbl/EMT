@@ -19,9 +19,9 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{938B85B4-C1F7-4DFF-BC03-90E3FD014B26}</ProjectGuid>
-    <RootNamespace>EMTTest</RootNamespace>
-    <ConfigurationType>Application</ConfigurationType>
+    <ProjectGuid>{E85C54CF-230C-44BE-A3FF-5CB315994AE7}</ProjectGuid>
+    <RootNamespace>EMTIPC</RootNamespace>
+    <ConfigurationType>StaticLibrary</ConfigurationType>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <Import Project="$(SolutionDir)conf.props" />
@@ -39,15 +39,17 @@
     </ClCompile>
     <Link>
       <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
-      <SubSystem>Console</SubSystem>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\src\EMTTest\main.cpp" />
+    <ClInclude Include="..\src\EMTIPC\EMTIPC.h" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="EMTIPC.vcxproj">
-      <Project>{e85c54cf-230c-44be-a3ff-5cb315994ae7}</Project>
+    <ClCompile Include="..\src\EMTIPC\EMTIPC.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="EMTPool.vcxproj">
+      <Project>{1661cbbb-50af-4f2a-9020-2de1865708a3}</Project>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

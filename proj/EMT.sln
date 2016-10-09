@@ -7,6 +7,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "EMTTest", "EMTTest.vcxproj"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "EMTPool", "EMTPool.vcxproj", "{1661CBBB-50AF-4F2A-9020-2DE1865708A3}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "EMTIPC", "EMTIPC.vcxproj", "{E85C54CF-230C-44BE-A3FF-5CB315994AE7}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -31,6 +33,14 @@ Global
 		{1661CBBB-50AF-4F2A-9020-2DE1865708A3}.Release|x64.Build.0 = Release|x64
 		{1661CBBB-50AF-4F2A-9020-2DE1865708A3}.Release|x86.ActiveCfg = Release|Win32
 		{1661CBBB-50AF-4F2A-9020-2DE1865708A3}.Release|x86.Build.0 = Release|Win32
+		{E85C54CF-230C-44BE-A3FF-5CB315994AE7}.Debug|x64.ActiveCfg = Debug|x64
+		{E85C54CF-230C-44BE-A3FF-5CB315994AE7}.Debug|x64.Build.0 = Debug|x64
+		{E85C54CF-230C-44BE-A3FF-5CB315994AE7}.Debug|x86.ActiveCfg = Debug|Win32
+		{E85C54CF-230C-44BE-A3FF-5CB315994AE7}.Debug|x86.Build.0 = Debug|Win32
+		{E85C54CF-230C-44BE-A3FF-5CB315994AE7}.Release|x64.ActiveCfg = Release|x64
+		{E85C54CF-230C-44BE-A3FF-5CB315994AE7}.Release|x64.Build.0 = Release|x64
+		{E85C54CF-230C-44BE-A3FF-5CB315994AE7}.Release|x86.ActiveCfg = Release|Win32
+		{E85C54CF-230C-44BE-A3FF-5CB315994AE7}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
