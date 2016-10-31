@@ -17,7 +17,7 @@ struct _EMTPOOL
 	void (*freeAll)(PEMTPOOL pThis, const uint32_t uId);
 
 	const uint32_t (*transfer)(PEMTPOOL pThis, void * pMem, const uint32_t uToId);
-	const void * (*take)(PEMTPOOL pThis, const uint32_t uToken);
+	void * (*take)(PEMTPOOL pThis, const uint32_t uToken);
 
 	uint8_t reserved[32];
 };

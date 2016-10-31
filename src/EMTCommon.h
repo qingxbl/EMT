@@ -15,4 +15,37 @@
 #endif // __cplusplus
 #endif // EXTERN_C
 
+#ifndef DECLSPEC_NOVTABLE
+#if (_MSC_VER >= 1100) && defined(__cplusplus)
+#define DECLSPEC_NOVTABLE   __declspec(novtable)
+#else
+#define DECLSPEC_NOVTABLE
+#endif
+#endif // DECLSPEC_NOVTABLE
+
+#ifdef __cplusplus
+struct DECLSPEC_NOVTABLE IEMTUnknown
+{
+	virtual void destruct() = 0;
+};
+
+#define IMPL_IEMTUNKNOWN virtual void destruct() { delete this; }
+#endif // __cplusplus
+
+#ifndef BEGIN_NAMESPACE_ANONYMOUS
+#ifdef __cplusplus
+#define BEGIN_NAMESPACE_ANONYMOUS namespace {
+#else // !__cplusplus
+#define BEGIN_NAMESPACE_ANONYMOUS
+#endif // __cplusplus
+#endif // !BEGIN_NAMESPACE_ANONYMOUS
+
+#ifndef END_NAMESPACE_ANONYMOUS
+#ifdef __cplusplus
+#define END_NAMESPACE_ANONYMOUS }
+#else // !__cplusplus
+#define END_NAMESPACE_ANONYMOUS
+#endif // __cplusplus
+#endif // !END_NAMESPACE_ANONYMOUS
+
 #endif // __EMTCOMMON_H__

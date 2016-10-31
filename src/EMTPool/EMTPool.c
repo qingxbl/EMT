@@ -20,7 +20,7 @@ static void * EMTPool_alloc(PEMTPOOL pThis, const uint32_t uMemLen);
 static void EMTPool_free(PEMTPOOL pThis, void * pMem);
 static void EMTPool_freeAll(PEMTPOOL pThis, const uint32_t uId);
 static const uint32_t EMTPool_transfer(PEMTPOOL pThis, void * pMem, const uint32_t uToId);
-static const void * EMTPool_take(PEMTPOOL pThis, const uint32_t uToken);
+static void * EMTPool_take(PEMTPOOL pThis, const uint32_t uToken);
 
 typedef struct _EMTPOOLPRIVATE EMTPOOLPRIVATE, *PEMTPOOLPRIVATE;
 typedef struct _EMTPOOLBLOCKMETAINFO EMTPOOLBLOCKMETAINFO, *PEMTPOOLBLOCKMETAINFO;
@@ -74,8 +74,8 @@ static int32_t EMTPool_validation(PEMTPOOL pThis, void * pMem)
 	if (uBlock < d->pMetaInfo->uBlockStart || uBlock >= d->pMetaInfo->uBlockCount)
 		return kEMTPoolOutOfRange;
 
-	if (pBlockMetaInfo->owner != d->uId)
-		return kEMTPoolNotOwner;
+	//if (pBlockMetaInfo->owner != d->uId)
+	//	return kEMTPoolNotOwner;
 
 	return kEMTPoolNoError;
 }
@@ -218,7 +218,7 @@ static const uint32_t EMTPool_transfer(PEMTPOOL pThis, void * pMem, const uint32
 	return uBlock;
 }
 
-static const void * EMTPool_take(PEMTPOOL pThis, const uint32_t uToken)
+static void * EMTPool_take(PEMTPOOL pThis, const uint32_t uToken)
 {
 	EMT_D(EMTPOOL);
 	void * pMem = (uint8_t *)d->pMem + uToken * d->pMetaInfo->uBlockLen;
