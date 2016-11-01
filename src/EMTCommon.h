@@ -17,7 +17,7 @@
 
 #ifndef DECLSPEC_NOVTABLE
 #if (_MSC_VER >= 1100) && defined(__cplusplus)
-#define DECLSPEC_NOVTABLE   __declspec(novtable)
+#define DECLSPEC_NOVTABLE __declspec(novtable)
 #else
 #define DECLSPEC_NOVTABLE
 #endif
@@ -30,6 +30,11 @@ struct DECLSPEC_NOVTABLE IEMTUnknown
 };
 
 #define IMPL_IEMTUNKNOWN virtual void destruct() { delete this; }
+
+struct IEMTUnknown_Delete
+{
+	void operator()(IEMTUnknown * p) const { p->destruct(); }
+};
 #endif // __cplusplus
 
 #ifndef BEGIN_NAMESPACE_ANONYMOUS
