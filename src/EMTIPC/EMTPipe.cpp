@@ -42,10 +42,12 @@ public:
 
 public:
 	explicit EMTPipe(IEMTThread * thread, IEMTPipeHandler * pipeHandler, const uint32_t bufferSize, const uint32_t timeout);
+	virtual ~EMTPipe();
 
 protected: // IEMTPipe
-	virtual bool listen(wchar_t *name);
-	virtual bool connect(wchar_t *name);
+	virtual bool listen(wchar_t * name);
+	virtual bool connect(wchar_t * name);
+	virtual void close();
 
 	virtual void send(void * buf, const uint32_t len);
 
@@ -106,6 +108,11 @@ EMTPipe::EMTPipe(IEMTThread * thread, IEMTPipeHandler * pipeHandler, const uint3
 {
 	memset(&mOverlapped, 0, sizeof(mOverlapped));
 	mOverlapped.hEvent = INVALID_HANDLE_VALUE;
+}
+
+EMTPipe::~EMTPipe()
+{
+	close();
 }
 
 bool EMTPipe::listen(wchar_t * name)
@@ -186,6 +193,12 @@ bool EMTPipe::connect(wchar_t * name)
 	return false;
 }
 
+void EMTPipe::close()
+{
+	closeHandle(&mPipe);
+	closeHandle(&mOverlapped.hEvent);
+}
+
 void EMTPipe::send(void * buf, const uint32_t len)
 {
 	OVERLAPPED_EMTPipe * overlap = createOverlappedEx(this, len, buf);
@@ -196,6 +209,8 @@ void EMTPipe::send(void * buf, const uint32_t len)
 void EMTPipe::run()
 {
 	closeHandle(&mOverlapped.hEvent);
+	memset(&mOverlapped, 0, sizeof(mOverlapped));
+	mOverlapped.hEvent = INVALID_HANDLE_VALUE;
 
 	mThread->unregisterWaitable(this);
 

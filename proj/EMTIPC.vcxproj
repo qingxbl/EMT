@@ -44,11 +44,13 @@
   <ItemGroup>
     <ClInclude Include="..\src\EMTIPC\EMTIPC.h" />
     <ClInclude Include="..\src\EMTIPC\EMTPipe.h" />
+    <ClInclude Include="..\src\EMTIPC\EMTShareMemory.h" />
     <ClInclude Include="..\src\EMTIPC\EMTThread.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\EMTIPC\EMTIPC.cpp" />
     <ClCompile Include="..\src\EMTIPC\EMTPipe.cpp" />
+    <ClCompile Include="..\src\EMTIPC\EMTShareMemory.cpp" />
     <ClCompile Include="..\src\EMTIPC\EMTThread.cpp" />
   </ItemGroup>
   <ItemGroup>

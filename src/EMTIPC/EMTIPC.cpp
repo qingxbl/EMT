@@ -2,10 +2,13 @@
 
 #include "EMTPipe.h"
 #include "EMTThread.h"
+#include "EMTShareMemory.h"
 
 #include <EMTPool/EMTPool.h>
 
 #include <Windows.h>
+
+#include <memory>
 
 BEGIN_NAMESPACE_ANONYMOUS
 
@@ -13,6 +16,8 @@ enum
 {
 	kDefaultTimeout = 5000,
 	kBufferSize = 512,
+	kMemoryPoolSize = 8 * 1024 * 1024,
+	kMemoryBlockSize = 4 * 1024,
 };
 
 enum
@@ -58,6 +63,7 @@ class EMTIPC : public IEMTIPC, public IEMTPipeHandler
 
 public:
 	explicit EMTIPC(IEMTThread * thread, IEMTIPCHandler * ipcHandler);
+	virtual ~EMTIPC();
 
 protected: // IEMTIPC
 	virtual bool listen(wchar_t *name);
@@ -76,6 +82,9 @@ protected: // IEMTPipeHandler
 	virtual void sent(void * buf, const uint32_t len);
 
 private:
+	bool open(wchar_t * name, const bool isServer);
+
+private:
 	void received(EMTPipeProtoHandshake & p);
 	void received(EMTPipeProtoTransfer & p);
 
@@ -85,9 +94,10 @@ private:
 	void sendPack(EMTPipeProtoBase * pack);
 
 private:
-	IEMTPipe * mPipe;
 	IEMTThread * mThread;
 	IEMTIPCHandler * mIPCHandler;
+	std::unique_ptr<IEMTPipe, IEMTUnknown_Delete> mPipe;
+	std::unique_ptr<IEMTShareMemory, IEMTUnknown_Delete> mShareMemory;
 	EMTPOOL mPool;
 
 	bool mConnected;
@@ -97,29 +107,29 @@ private:
 EMTIPC::EMTIPC(IEMTThread * thread, IEMTIPCHandler * ipcHandler)
 	: mThread(thread)
 	, mIPCHandler(ipcHandler)
+	, mPipe(nullptr)
+	, mShareMemory(nullptr)
 	, mConnected(false)
 {
 	constructEMTPool(&mPool, nullptr, 0, 0);
 }
 
+EMTIPC::~EMTIPC()
+{
+	if (mPipe)
+	{
+		destructEMTPool(&mPool);
+	}
+}
+
 bool EMTIPC::listen(wchar_t * name)
 {
-	wchar_t fullname[MAX_PATH];
-
-	wcscpy_s(fullname, L"\\\\.\\pipe\\");
-	wcscat_s(fullname, name);
-
-	return mPipe->listen(fullname);
+	return open(name, true);
 }
 
 bool EMTIPC::connect(wchar_t * name)
 {
-	wchar_t fullname[MAX_PATH];
-
-	wcscpy_s(fullname, L"\\\\.\\pipe\\");
-	wcscat_s(fullname, name);
-
-	return mPipe->connect(fullname);
+	return open(name, false);
 }
 
 void * EMTIPC::alloc(const uint32_t len)
@@ -190,6 +200,24 @@ void EMTIPC::sent(void * buf, const uint32_t len)
 	}
 
 	delete p;
+}
+
+bool EMTIPC::open(wchar_t * name, const bool isServer)
+{
+	wchar_t fullname[MAX_PATH];
+
+	wcscpy_s(fullname, L"\\\\.\\pipe\\");
+	wcscat_s(fullname, name);
+
+	const bool pipeResult = isServer ? mPipe->listen(fullname) : mPipe->connect(fullname);
+	if (!pipeResult)
+		return false;
+
+	void * shareMemory = mShareMemory->open(name, kMemoryPoolSize);
+
+	constructEMTPool(&mPool, shareMemory, mShareMemory->length(), kMemoryBlockSize);
+
+	return true;
 }
 
 void EMTIPC::received(EMTPipeProtoHandshake & p)

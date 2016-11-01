@@ -26,8 +26,9 @@ struct DECLSPEC_NOVTABLE IEMTPipeHandler : public IEMTUnknown
 
 struct DECLSPEC_NOVTABLE IEMTPipe : public IEMTUnknown
 {
-	virtual bool listen(wchar_t *name) = 0;
-	virtual bool connect(wchar_t *name) = 0;;
+	virtual bool listen(wchar_t * name) = 0;
+	virtual bool connect(wchar_t * name) = 0;
+	virtual void close() = 0;
 
 	virtual void send(void * buf, const uint32_t len) = 0;
 };
