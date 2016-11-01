@@ -1,3 +1,5 @@
+#include "stable.h"
+
 #include "EMTPipe.h"
 
 #include "EMTThread.h"

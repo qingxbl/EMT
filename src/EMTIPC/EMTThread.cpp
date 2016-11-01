@@ -1,3 +1,5 @@
+#include "stable.h"
+
 #include "EMTThread.h"
 
 #include <Windows.h>

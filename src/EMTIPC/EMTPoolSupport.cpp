@@ -1,3 +1,5 @@
+#include "stable.h"
+
 #include <EMTPool/EMTPool.h>
 
 #include <Windows.h>

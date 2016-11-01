@@ -1,3 +1,5 @@
+#include "stable.h"
+
 #include "EMTShareMemory.h"
 
 #include <Windows.h>

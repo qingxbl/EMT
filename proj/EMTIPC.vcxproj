@@ -34,6 +34,7 @@
   <PropertyGroup Label="UserMacros" />
   <ItemDefinitionGroup>
     <ClCompile>
+      <PrecompiledHeader>Use</PrecompiledHeader>
       <AdditionalIncludeDirectories>$(SolutionDir)..\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
@@ -46,6 +47,7 @@
     <ClInclude Include="..\src\EMTIPC\EMTPipe.h" />
     <ClInclude Include="..\src\EMTIPC\EMTShareMemory.h" />
     <ClInclude Include="..\src\EMTIPC\EMTThread.h" />
+    <ClInclude Include="..\src\EMTIPC\stable.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\EMTIPC\EMTIPC.cpp" />
@@ -53,6 +55,9 @@
     <ClCompile Include="..\src\EMTIPC\EMTPoolSupport.cpp" />
     <ClCompile Include="..\src\EMTIPC\EMTShareMemory.cpp" />
     <ClCompile Include="..\src\EMTIPC\EMTThread.cpp" />
+    <ClCompile Include="..\src\EMTIPC\stable.cpp">
+      <PrecompiledHeader>Create</PrecompiledHeader>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="EMTPool.vcxproj">

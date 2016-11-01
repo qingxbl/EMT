@@ -1,3 +1,5 @@
+#include "stable.h"
+
 #include "EMTIPC.h"
 
 #include "EMTPipe.h"
