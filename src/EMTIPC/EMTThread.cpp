@@ -30,7 +30,6 @@ private:
 	void rebuildRegisteredHandles();
 
 private:
-	static DWORD WINAPI thread_entry(LPVOID lpThreadParameter);
 	static void NTAPI queue_entry(ULONG_PTR Parameter);
 	static void	APIENTRY timer_entry(LPVOID lpArgToCompletionRoutine, DWORD dwTimerLowValue, DWORD dwTimerHighValue);
 
@@ -45,8 +44,9 @@ private:
 };
 
 EMTWorkThread::EMTWorkThread()
+	: mThreadId(::GetCurrentThreadId())
 {
-	mThread = ::CreateThread(NULL, 0, &EMTWorkThread::thread_entry, this, 0, &mThreadId);
+	::DuplicateHandle(::GetCurrentProcess(), ::GetCurrentThread(), ::GetCurrentProcess(), &mThread, 0, FALSE, DUPLICATE_SAME_ACCESS);
 
 	mRegisteredWaitable.reserve(MAXIMUM_WAIT_OBJECTS);
 }
@@ -159,11 +159,6 @@ void EMTWorkThread::rebuildRegisteredHandles()
 	std::transform(mRegisteredWaitable.cbegin(), mRegisteredWaitable.cend(), mRegsiteredHandles, [](IEMTWaitable *c) -> HANDLE { return c->waitHandle(); });
 }
 
-DWORD EMTWorkThread::thread_entry(LPVOID lpThreadParameter)
-{
-	return static_cast<EMTWorkThread *>(lpThreadParameter)->run();
-}
-
 void EMTWorkThread::queue_entry(ULONG_PTR Parameter)
 {
 	IEMTRunnable * runnable = (IEMTRunnable *)Parameter;
@@ -175,6 +170,7 @@ void EMTWorkThread::queue_entry(ULONG_PTR Parameter)
 
 void EMTWorkThread::timer_entry(LPVOID lpArgToCompletionRoutine, DWORD dwTimerLowValue, DWORD dwTimerHighValue)
 {
+
 }
 
 END_NAMESPACE_ANONYMOUS
