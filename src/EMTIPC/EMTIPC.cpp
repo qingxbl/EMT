@@ -147,7 +147,7 @@ void EMTIPC::free(void * buf)
 void EMTIPC::send(void * buf)
 {
 	if (!mThread->isCurrentThread())
-		return mThread->queue(createEMTRunnable(std::bind(static_cast<void (EMTIPC::*)(void *)>(&EMTIPC::send), this, buf)), 0);
+		return mThread->queue(createEMTRunnable(std::bind(static_cast<void (EMTIPC::*)(void *)>(&EMTIPC::send), this, buf)));
 
 	const uint32_t len = sizeof(EMTPipeProtoTransfer) + sizeof(uint32_t);
 	EMTPipeProtoTransfer * p = new (malloc(len)) EMTPipeProtoTransfer;

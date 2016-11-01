@@ -143,7 +143,7 @@ bool EMTPipe::listen(wchar_t * name)
 	const DWORD err = ::GetLastError();
 	if (err == ERROR_PIPE_CONNECTED)
 	{
-		mThread->queue(this, 0);
+		mThread->queue(this);
 	}
 	else if (err == ERROR_IO_PENDING)
 	{
@@ -186,7 +186,7 @@ bool EMTPipe::connect(wchar_t * name)
 		if (!success)
 			break;
 
-		mThread->queue(this, 0);
+		mThread->queue(this);
 
 		return true;
 	} while (true);

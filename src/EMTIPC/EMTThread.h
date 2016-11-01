@@ -23,7 +23,8 @@ struct DECLSPEC_NOVTABLE IEMTThread : public IEMTUnknown
 {
 	virtual void registerWaitable(IEMTWaitable *waitable) = 0;
 	virtual void unregisterWaitable(IEMTWaitable *waitable) = 0;
-	virtual void queue(IEMTRunnable *runnable, uint32_t delay) = 0;
+	virtual void queue(IEMTRunnable *runnable) = 0;
+	virtual void delay(IEMTRunnable *runnable, const uint64_t time, const bool repeat) = 0;
 	virtual bool isCurrentThread() = 0;
 	virtual void exit() = 0;
 };

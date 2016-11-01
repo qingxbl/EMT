@@ -20,7 +20,8 @@ public:
 protected: // IEMTThread
 	virtual void registerWaitable(IEMTWaitable *waitable);
 	virtual void unregisterWaitable(IEMTWaitable *waitable);
-	virtual void queue(IEMTRunnable *runnable, uint32_t delay);
+	virtual void queue(IEMTRunnable *runnable);
+	virtual void delay(IEMTRunnable *runnable, const uint64_t time, const bool repeat);
 	virtual bool isCurrentThread();
 	virtual void exit();
 
@@ -31,6 +32,7 @@ private:
 private:
 	static DWORD WINAPI thread_entry(LPVOID lpThreadParameter);
 	static void NTAPI queue_entry(ULONG_PTR Parameter);
+	static void	APIENTRY timer_entry(LPVOID lpArgToCompletionRoutine, DWORD dwTimerLowValue, DWORD dwTimerHighValue);
 
 private:
 	DWORD mThreadId;
@@ -63,7 +65,7 @@ EMTWorkThread::~EMTWorkThread()
 void EMTWorkThread::registerWaitable(IEMTWaitable * waitable)
 {
 	if (!isCurrentThread())
-		return queue(createEMTRunnable(std::bind(&EMTWorkThread::registerWaitable, this, waitable)), 0);
+		return queue(createEMTRunnable(std::bind(&EMTWorkThread::registerWaitable, this, waitable)));
 
 	if (std::find(mRegisteredWaitable.cbegin(), mRegisteredWaitable.cend(), waitable) == mRegisteredWaitable.cend())
 	{
@@ -75,15 +77,20 @@ void EMTWorkThread::registerWaitable(IEMTWaitable * waitable)
 void EMTWorkThread::unregisterWaitable(IEMTWaitable * waitable)
 {
 	if (!isCurrentThread())
-		return queue(createEMTRunnable(std::bind(&EMTWorkThread::unregisterWaitable, this, waitable)), 0);
+		return queue(createEMTRunnable(std::bind(&EMTWorkThread::unregisterWaitable, this, waitable)));
 
 	mRegisteredWaitable.erase(std::remove_if(mRegisteredWaitable.begin(), mRegisteredWaitable.end(), [waitable](IEMTWaitable *c) { return c == waitable; }), mRegisteredWaitable.end());
 	rebuildRegisteredHandles();
 }
 
-void EMTWorkThread::queue(IEMTRunnable * runnable, uint32_t delay)
+void EMTWorkThread::queue(IEMTRunnable * runnable)
 {
 	::QueueUserAPC(&EMTWorkThread::queue_entry, mThread, (ULONG_PTR)(runnable));
+}
+
+void EMTWorkThread::delay(IEMTRunnable * runnable, const uint64_t time, const bool repeat)
+{
+
 }
 
 bool EMTWorkThread::isCurrentThread()
@@ -94,7 +101,7 @@ bool EMTWorkThread::isCurrentThread()
 void EMTWorkThread::exit()
 {
 	if (!isCurrentThread())
-		return queue(createEMTRunnable(std::bind(&EMTWorkThread::exit, this)), 0);
+		return queue(createEMTRunnable(std::bind(&EMTWorkThread::exit, this)));
 
 	mRunning = false;
 }
@@ -164,6 +171,10 @@ void EMTWorkThread::queue_entry(ULONG_PTR Parameter)
 
 	if (runnable->isAutoDestroy())
 		runnable->destruct();
+}
+
+void EMTWorkThread::timer_entry(LPVOID lpArgToCompletionRoutine, DWORD dwTimerLowValue, DWORD dwTimerHighValue)
+{
 }
 
 END_NAMESPACE_ANONYMOUS
