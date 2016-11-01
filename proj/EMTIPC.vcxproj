@@ -50,6 +50,7 @@
   <ItemGroup>
     <ClCompile Include="..\src\EMTIPC\EMTIPC.cpp" />
     <ClCompile Include="..\src\EMTIPC\EMTPipe.cpp" />
+    <ClCompile Include="..\src\EMTIPC\EMTPoolSupport.cpp" />
     <ClCompile Include="..\src\EMTIPC\EMTShareMemory.cpp" />
     <ClCompile Include="..\src\EMTIPC\EMTThread.cpp" />
   </ItemGroup>
