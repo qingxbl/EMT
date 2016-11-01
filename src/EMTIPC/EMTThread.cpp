@@ -7,13 +7,13 @@
 
 BEGIN_NAMESPACE_ANONYMOUS
 
-class WorkThread : public IEMTThread
+class EMTWorkThread : public IEMTThread
 {
 	IMPL_IEMTUNKNOWN;
 
 public:
-	explicit WorkThread();
-	virtual ~WorkThread();
+	explicit EMTWorkThread();
+	virtual ~EMTWorkThread();
 
 protected: // IEMTThread
 	virtual void registerWaitable(IEMTWaitable *waitable);
@@ -40,14 +40,14 @@ private:
 	bool mRunning;
 };
 
-WorkThread::WorkThread()
+EMTWorkThread::EMTWorkThread()
 {
-	mThread = ::CreateThread(NULL, 0, &WorkThread::thread_entry, this, 0, &mThreadId);
+	mThread = ::CreateThread(NULL, 0, &EMTWorkThread::thread_entry, this, 0, &mThreadId);
 
 	mRegisteredWaitable.reserve(MAXIMUM_WAIT_OBJECTS);
 }
 
-WorkThread::~WorkThread()
+EMTWorkThread::~EMTWorkThread()
 {
 	if (mRunning)
 	{
@@ -55,13 +55,13 @@ WorkThread::~WorkThread()
 		::WaitForSingleObject(mThread, 5000);
 	}
 
-	CloseHandle(mThread);
+	::CloseHandle(mThread);
 }
 
-void WorkThread::registerWaitable(IEMTWaitable * waitable)
+void EMTWorkThread::registerWaitable(IEMTWaitable * waitable)
 {
 	if (!isCurrentThread())
-		return queue(createEMTRunnable(std::bind(&WorkThread::registerWaitable, this, waitable)), 0);
+		return queue(createEMTRunnable(std::bind(&EMTWorkThread::registerWaitable, this, waitable)), 0);
 
 	if (std::find(mRegisteredWaitable.cbegin(), mRegisteredWaitable.cend(), waitable) == mRegisteredWaitable.cend())
 	{
@@ -70,34 +70,34 @@ void WorkThread::registerWaitable(IEMTWaitable * waitable)
 	}
 }
 
-void WorkThread::unregisterWaitable(IEMTWaitable * waitable)
+void EMTWorkThread::unregisterWaitable(IEMTWaitable * waitable)
 {
 	if (!isCurrentThread())
-		return queue(createEMTRunnable(std::bind(&WorkThread::unregisterWaitable, this, waitable)), 0);
+		return queue(createEMTRunnable(std::bind(&EMTWorkThread::unregisterWaitable, this, waitable)), 0);
 
 	mRegisteredWaitable.erase(std::remove_if(mRegisteredWaitable.begin(), mRegisteredWaitable.end(), [waitable](IEMTWaitable *c) { return c == waitable; }), mRegisteredWaitable.end());
 	rebuildRegisteredHandles();
 }
 
-void WorkThread::queue(IEMTRunnable * runnable, uint32_t delay)
+void EMTWorkThread::queue(IEMTRunnable * runnable, uint32_t delay)
 {
-	::QueueUserAPC(&WorkThread::queue_entry, mThread, (ULONG_PTR)(runnable));
+	::QueueUserAPC(&EMTWorkThread::queue_entry, mThread, (ULONG_PTR)(runnable));
 }
 
-bool WorkThread::isCurrentThread()
+bool EMTWorkThread::isCurrentThread()
 {
 	return ::GetCurrentThreadId() == mThreadId;
 }
 
-void WorkThread::exit()
+void EMTWorkThread::exit()
 {
 	if (!isCurrentThread())
-		return queue(createEMTRunnable(std::bind(&WorkThread::exit, this)), 0);
+		return queue(createEMTRunnable(std::bind(&EMTWorkThread::exit, this)), 0);
 
 	mRunning = false;
 }
 
-DWORD WorkThread::run()
+DWORD EMTWorkThread::run()
 {
 	mRunning = true;
 
@@ -145,17 +145,17 @@ DWORD WorkThread::run()
 	return 0;
 }
 
-void WorkThread::rebuildRegisteredHandles()
+void EMTWorkThread::rebuildRegisteredHandles()
 {
 	std::transform(mRegisteredWaitable.cbegin(), mRegisteredWaitable.cend(), mRegsiteredHandles, [](IEMTWaitable *c) -> HANDLE { return c->waitHandle(); });
 }
 
-DWORD WorkThread::thread_entry(LPVOID lpThreadParameter)
+DWORD EMTWorkThread::thread_entry(LPVOID lpThreadParameter)
 {
-	return static_cast<WorkThread *>(lpThreadParameter)->run();
+	return static_cast<EMTWorkThread *>(lpThreadParameter)->run();
 }
 
-void WorkThread::queue_entry(ULONG_PTR Parameter)
+void EMTWorkThread::queue_entry(ULONG_PTR Parameter)
 {
 	IEMTRunnable * runnable = (IEMTRunnable *)Parameter;
 	runnable->run();
@@ -168,5 +168,5 @@ END_NAMESPACE_ANONYMOUS
 
 IEMTThread * createEMTThread()
 {
-	return new WorkThread();
+	return new EMTWorkThread();
 }
