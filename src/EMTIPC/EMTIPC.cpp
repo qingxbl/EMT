@@ -1,12 +1,9 @@
-#include "stable.h"
-
 #include "EMTIPC.h"
 
-#include "EMTPipe.h"
-#include "EMTThread.h"
-#include "EMTShareMemory.h"
-
-#include <EMTPool/EMTPool.h>
+#include <EMTUtil/EMTPipe.h>
+#include <EMTUtil/EMTThread.h>
+#include <EMTUtil/EMTShareMemory.h>
+#include <EMTUtil/EMTPool.h>
 
 #include <Windows.h>
 
