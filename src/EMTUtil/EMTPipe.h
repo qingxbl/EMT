@@ -20,15 +20,17 @@ struct DECLSPEC_NOVTABLE IEMTPipeHandler : public IEMTUnknown
 	virtual void connected() = 0;
 	virtual void disconnected() = 0;
 
-	virtual void received(void * buf) = 0;
+	virtual void received(void * buf, const uint32_t len) = 0;
 	virtual void sent(void * buf, const uint32_t len) = 0;
 };
 
 struct DECLSPEC_NOVTABLE IEMTPipe : public IEMTUnknown
 {
-	virtual bool listen(wchar_t * name) = 0;
-	virtual bool connect(wchar_t * name) = 0;
-	virtual void close() = 0;
+	virtual bool isConnected() = 0;
+
+	virtual bool listen(const wchar_t * name) = 0;
+	virtual bool connect(const wchar_t * name) = 0;
+	virtual void disconnect() = 0;
 
 	virtual void send(void * buf, const uint32_t len) = 0;
 };

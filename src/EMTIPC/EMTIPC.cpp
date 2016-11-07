@@ -28,6 +28,8 @@ enum
 
 struct EMTPipeProtoBase
 {
+	EMTPipeProtoBase(const uint16_t uri, const uint16_t len) : uri(uri), len(len) { }
+
 	uint16_t uri;
 	uint16_t len;
 };
@@ -38,10 +40,7 @@ struct EMTPipeProto : EMTPipeProtoBase
 	typedef T FinalT;
 	enum { kUri = URI };
 
-	EMTPipeProto() : uri(kUri), len(sizeof(FinalT)) { }
-
-	uint16_t uri;
-	uint16_t len;
+	EMTPipeProto() : EMTPipeProtoBase(kUri, sizeof(FinalT)) { }
 };
 
 struct EMTPipeProtoHandshake : public EMTPipeProto<kEMTPipeProtoHandshake, EMTPipeProtoHandshake>
@@ -65,8 +64,11 @@ public:
 	virtual ~EMTIPC();
 
 protected: // IEMTIPC
-	virtual bool listen(wchar_t *name);
-	virtual bool connect(wchar_t *name);
+	virtual bool isConnected();
+
+	virtual bool listen(const wchar_t *name);
+	virtual bool connect(const wchar_t *name);
+	virtual void disconnect();
 
 	virtual void * alloc(const uint32_t len);
 	virtual void free(void * buf);
@@ -77,11 +79,11 @@ protected: // IEMTPipeHandler
 	virtual void connected();
 	virtual void disconnected();
 
-	virtual void received(void * buf);
+	virtual void received(void * buf, const uint32_t len);
 	virtual void sent(void * buf, const uint32_t len);
 
 private:
-	bool open(wchar_t * name, const bool isServer);
+	bool open(const wchar_t * name, const bool isServer);
 
 private:
 	void received(EMTPipeProtoHandshake & p);
@@ -91,6 +93,9 @@ private:
 	void sent(EMTPipeProtoTransfer & p);
 
 	void sendPack(EMTPipeProtoBase * pack);
+
+	void createPool(const wchar_t * name);
+	void deletePool();
 
 private:
 	IEMTThread * mThread;
@@ -106,29 +111,41 @@ private:
 EMTIPC::EMTIPC(IEMTThread * thread, IEMTIPCHandler * ipcHandler)
 	: mThread(thread)
 	, mIPCHandler(ipcHandler)
-	, mPipe(nullptr)
-	, mShareMemory(nullptr)
+	, mPipe(createEMTPipe(thread, this))
 	, mConnected(false)
 {
-	constructEMTPool(&mPool, nullptr, 0, 0);
+
 }
 
 EMTIPC::~EMTIPC()
 {
-	if (mPipe)
-	{
-		destructEMTPool(&mPool);
-	}
+	deletePool();
 }
 
-bool EMTIPC::listen(wchar_t * name)
+bool EMTIPC::isConnected()
+{
+	return mConnected;
+}
+
+bool EMTIPC::listen(const wchar_t * name)
 {
 	return open(name, true);
 }
 
-bool EMTIPC::connect(wchar_t * name)
+bool EMTIPC::connect(const wchar_t * name)
 {
 	return open(name, false);
+}
+
+void EMTIPC::disconnect()
+{
+	if (!mThread->isCurrentThread())
+		return mThread->queue(createEMTRunnable(std::bind(&EMTIPC::disconnect, this)));
+
+	if (!mConnected)
+		deletePool();
+
+	mPipe->disconnect();
 }
 
 void * EMTIPC::alloc(const uint32_t len)
@@ -144,7 +161,7 @@ void EMTIPC::free(void * buf)
 void EMTIPC::send(void * buf)
 {
 	if (!mThread->isCurrentThread())
-		return mThread->queue(createEMTRunnable(std::bind(static_cast<void (EMTIPC::*)(void *)>(&EMTIPC::send), this, buf)));
+		return mThread->queue(createEMTRunnable(std::bind(&EMTIPC::send, this, buf)));
 
 	const uint32_t len = sizeof(EMTPipeProtoTransfer) + sizeof(uint32_t);
 	EMTPipeProtoTransfer * p = new (malloc(len)) EMTPipeProtoTransfer;
@@ -163,11 +180,13 @@ void EMTIPC::connected()
 
 void EMTIPC::disconnected()
 {
+	deletePool();
 	mConnected = false;
+
 	mIPCHandler->disconnected();
 }
 
-void EMTIPC::received(void * buf)
+void EMTIPC::received(void * buf, const uint32_t len)
 {
 	EMTPipeProtoBase * p = (EMTPipeProtoBase *)buf;
 	switch (p->uri)
@@ -201,7 +220,7 @@ void EMTIPC::sent(void * buf, const uint32_t len)
 	delete p;
 }
 
-bool EMTIPC::open(wchar_t * name, const bool isServer)
+bool EMTIPC::open(const wchar_t * name, const bool isServer)
 {
 	wchar_t fullname[MAX_PATH];
 
@@ -212,9 +231,10 @@ bool EMTIPC::open(wchar_t * name, const bool isServer)
 	if (!pipeResult)
 		return false;
 
-	void * shareMemory = mShareMemory->open(name, kMemoryPoolSize);
+	wcscpy_s(fullname, L"Local\\");
+	wcscat_s(fullname, name);
 
-	constructEMTPool(&mPool, shareMemory, mShareMemory->length(), kMemoryBlockSize);
+	createPool(fullname);
 
 	return true;
 }
@@ -251,9 +271,30 @@ void EMTIPC::sendPack(EMTPipeProtoBase * pack)
 	mPipe->send(pack, pack->len);
 }
 
+void EMTIPC::createPool(const wchar_t * fullname)
+{
+	if (mShareMemory)
+		return;
+
+	mShareMemory.reset(createEMTShareMemory());
+
+	void * shareMemory = mShareMemory->open(fullname, kMemoryPoolSize);
+
+	constructEMTPool(&mPool, shareMemory, mShareMemory->length(), kMemoryBlockSize);
+}
+
+void EMTIPC::deletePool()
+{
+	if (!mShareMemory)
+		return;
+
+	destructEMTPool(&mPool);
+	mShareMemory.release();
+}
+
 END_NAMESPACE_ANONYMOUS
 
-IEMTIPC * createEMTIPC(IEMTIPCHandler * ipcHandler)
+IEMTIPC * createEMTIPC(IEMTThread * thread, IEMTIPCHandler * ipcHandler)
 {
-	return new EMTIPC(nullptr, ipcHandler);
+	return new EMTIPC(thread, ipcHandler);
 }

@@ -18,7 +18,7 @@ protected: // IEMTShareMemory
 	virtual uint32_t length();
 	virtual void * address();
 
-	virtual void * open(wchar_t * name, const uint32_t length);
+	virtual void * open(const wchar_t * name, const uint32_t length);
 	virtual void close();
 
 private:
@@ -50,7 +50,7 @@ void * EMTShareMemory::address()
 	return mAddress;
 }
 
-void * EMTShareMemory::open(wchar_t * name, const uint32_t length)
+void * EMTShareMemory::open(const wchar_t * name, const uint32_t length)
 {
 	do
 	{

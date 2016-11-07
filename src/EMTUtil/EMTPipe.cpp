@@ -47,9 +47,11 @@ public:
 	virtual ~EMTPipe();
 
 protected: // IEMTPipe
-	virtual bool listen(wchar_t * name);
-	virtual bool connect(wchar_t * name);
-	virtual void close();
+	virtual bool isConnected();
+
+	virtual bool listen(const wchar_t * name);
+	virtual bool connect(const wchar_t * name);
+	virtual void disconnect();
 
 	virtual void send(void * buf, const uint32_t len);
 
@@ -61,10 +63,12 @@ protected: // IEMTWaitable
 	virtual void * waitHandle();
 
 private:
-	void receive();
+	uint32_t receive();
 
 	void received(DWORD errorCode, DWORD numberOfBytesTransfered, OVERLAPPED_EMTPipe * overlapped);
 	void sent(DWORD errorCode, DWORD numberOfBytesTransfered, OVERLAPPED_EMTPipe * overlapped);
+
+	bool handleError(DWORD errorCode);
 
 private:
 	static void WINAPI readComplete(DWORD errorCode, DWORD numberOfBytesTransfered, LPOVERLAPPED overlapped);
@@ -114,11 +118,19 @@ EMTPipe::EMTPipe(IEMTThread * thread, IEMTPipeHandler * pipeHandler, const uint3
 
 EMTPipe::~EMTPipe()
 {
-	close();
+	disconnect();
 }
 
-bool EMTPipe::listen(wchar_t * name)
+bool EMTPipe::isConnected()
 {
+	return mPipe != INVALID_HANDLE_VALUE && mOverlapped.hEvent == INVALID_HANDLE_VALUE;
+}
+
+bool EMTPipe::listen(const wchar_t * name)
+{
+	if (mPipe != INVALID_HANDLE_VALUE)
+		return false;
+
 	mPipe = ::CreateNamedPipeW(
 		name,                     // pipe name
 		PIPE_ACCESS_DUPLEX |      // read/write access
@@ -137,7 +149,7 @@ bool EMTPipe::listen(wchar_t * name)
 
 	createEvent(&mOverlapped.hEvent);
 
-	if (!::ConnectNamedPipe(mPipe, &mOverlapped))
+	if (::ConnectNamedPipe(mPipe, &mOverlapped))
 		return false;
 
 	const DWORD err = ::GetLastError();
@@ -157,27 +169,27 @@ bool EMTPipe::listen(wchar_t * name)
 	return true;
 }
 
-bool EMTPipe::connect(wchar_t * name)
+bool EMTPipe::connect(const wchar_t * name)
 {
-	if (mPipe)
+	if (isConnected())
 		return false;
 
 	do
 	{
-		mPipe = CreateFile(
+		mPipe = ::CreateFileW(
 			name,           // pipe name 
 			GENERIC_READ |  // read and write access 
 			GENERIC_WRITE,
 			0,              // no sharing 
 			NULL,           // default security attributes
 			OPEN_EXISTING,  // opens existing pipe 
-			0,              // default attributes 
+			FILE_FLAG_OVERLAPPED,              // default attributes 
 			NULL);          // no template file 
 
 		if (mPipe == INVALID_HANDLE_VALUE)
 			break;
 
-		DWORD mode = PIPE_READMODE_MESSAGE;
+		DWORD mode = PIPE_READMODE_MESSAGE | PIPE_WAIT;
 		BOOL success = SetNamedPipeHandleState(
 			mPipe,    // pipe handle 
 			&mode,    // new pipe mode 
@@ -195,7 +207,7 @@ bool EMTPipe::connect(wchar_t * name)
 	return false;
 }
 
-void EMTPipe::close()
+void EMTPipe::disconnect()
 {
 	closeHandle(&mPipe);
 	closeHandle(&mOverlapped.hEvent);
@@ -218,7 +230,7 @@ void EMTPipe::run()
 
 	mPipeHandler->connected();
 
-	receive();
+	EMTPipe::handleError(receive());
 }
 
 bool EMTPipe::isAutoDestroy()
@@ -231,27 +243,51 @@ void * EMTPipe::waitHandle()
 	return mOverlapped.hEvent;
 }
 
-void EMTPipe::receive()
+uint32_t EMTPipe::receive()
 {
 	OVERLAPPED_EMTPipe * overlap = createOverlappedEx(this, mBufferSize);
 
-	::ReadFileEx(mPipe, overlap->buffer, overlap->len, overlap, &readComplete);
+	if (::ReadFileEx(mPipe, overlap->buffer, overlap->len, overlap, &readComplete) == FALSE)
+		return ::GetLastError();
+
+	return ERROR_SUCCESS;
 }
 
 void EMTPipe::received(DWORD errorCode, DWORD numberOfBytesTransfered, OVERLAPPED_EMTPipe * overlapped)
 {
-	if (errorCode != 0)
-	{
-	}
+	if (!handleError(errorCode))
+		return;
 
-	receive();
+	const uint32_t err = receive();
+
+	mPipeHandler->received(overlapped->buffer, numberOfBytesTransfered);
+
+	handleError(err);
 }
 
 void EMTPipe::sent(DWORD errorCode, DWORD numberOfBytesTransfered, OVERLAPPED_EMTPipe * overlapped)
 {
-	if (errorCode != 0)
+	if (!handleError(errorCode))
+		return;
+
+	mPipeHandler->sent(overlapped->buffer, overlapped->len);
+}
+
+bool EMTPipe::handleError(DWORD errorCode)
+{
+	switch (errorCode)
 	{
+	case ERROR_SUCCESS:
+		return true;
+	case ERROR_BROKEN_PIPE:
+		disconnect();
+		mPipeHandler->disconnected();
+		return false;
+	default:
+		::MessageBox(NULL, L"", NULL, 0);
 	}
+
+	return false;
 }
 
 void EMTPipe::readComplete(DWORD errorCode, DWORD numberOfBytesTransfered, LPOVERLAPPED overlapped)

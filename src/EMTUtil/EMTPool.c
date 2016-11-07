@@ -179,9 +179,10 @@ static void * EMTPool_alloc(PEMTPOOL pThis, const uint32_t uMemLen)
 	if (pBlockMetaInfo->len > uBlocks)
 	{
 		const uint32_t uShrinkLen = pBlockMetaInfo->len - uBlocks;
-		PEMTPOOLBLOCKMETAINFO pBlockMetaInfoCur = pBlockMetaInfo + uShrinkLen;
+		PEMTPOOLBLOCKMETAINFO pBlockMetaInfoCur = pBlockMetaInfo + uBlocks;
 		pBlockMetaInfoCur->len = uShrinkLen;
 		pBlockMetaInfoCur->owner = 0;
+		pBlockMetaInfo->len = uBlocks;
 	}
 
 	return (uint8_t *)d->pMem + (pBlockMetaInfo - d->pBlockMetaInfo) * d->pMetaInfo->uBlockLen;

@@ -21,12 +21,15 @@ struct DECLSPEC_NOVTABLE IEMTWaitable : public IEMTRunnable
 
 struct DECLSPEC_NOVTABLE IEMTThread : public IEMTUnknown
 {
+	virtual bool isCurrentThread() = 0;
+
+	virtual uint32_t exec() = 0;
+	virtual void exit() = 0;
+
 	virtual void registerWaitable(IEMTWaitable *waitable) = 0;
 	virtual void unregisterWaitable(IEMTWaitable *waitable) = 0;
 	virtual void queue(IEMTRunnable *runnable) = 0;
 	virtual void delay(IEMTRunnable *runnable, const uint64_t time, const bool repeat) = 0;
-	virtual bool isCurrentThread() = 0;
-	virtual void exit() = 0;
 };
 
 IEMTThread * createEMTThread(void);
