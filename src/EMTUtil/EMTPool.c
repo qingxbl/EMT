@@ -58,6 +58,8 @@ struct _EMTPOOLMETAINFO
 
 #define EMT_D(TYPE) TYPE##PRIVATE * d = (TYPE##PRIVATE *)pThis->reserved
 
+#define EMT_ROUNDTRIP(CUR, MIN, MAX) ((CUR) < (MIN) || (CUR) >= (MAX) ? (MIN) : (CUR))
+
 static const uint32_t EMTPool_blockFromAddress(PEMTPOOL pThis, void * pMem)
 {
 	EMT_D(EMTPOOL);
@@ -149,13 +151,21 @@ static void * EMTPool_alloc(PEMTPOOL pThis, const uint32_t uMemLen)
 	PEMTPOOLBLOCKMETAINFO pBlockMetaInfo = 0;
 	while (pBlockMetaInfo == 0 || pBlockMetaInfo->len < uBlocks)
 	{
-		const uint32_t uBlockCur = d->pMetaInfo->uNextBlock;
+		const uint32_t uBlockCurP = pBlockMetaInfo ? pBlockMetaInfo - d->pBlockMetaInfo + pBlockMetaInfo->len : d->pMetaInfo->uNextBlock;
+		const uint32_t uBlockCur = EMT_ROUNDTRIP(uBlockCurP, d->pMetaInfo->uBlockStart, d->pMetaInfo->uBlockCount);
 		PEMTPOOLBLOCKMETAINFO pBlockMetaInfoCur = d->pBlockMetaInfo + uBlockCur;
-		const uint32_t uBlockNextP = uBlockCur + pBlockMetaInfoCur->len;
-		const uint32_t uBlockNext = uBlockNextP < d->pMetaInfo->uBlockCount ? uBlockNextP : d->pMetaInfo->uBlockStart;
+		const uint32_t uBlockNext = EMT_ROUNDTRIP(uBlockCur + pBlockMetaInfoCur->len, d->pMetaInfo->uBlockStart, d->pMetaInfo->uBlockCount);
 
-		if (rt_cmpXchg32(&d->pMetaInfo->uNextBlock, uBlockNext, uBlockCur) == uBlockCur
-			&& rt_cmpXchg32(&pBlockMetaInfoCur->owner, d->uId, 0) == 0)
+		const uint32_t bSuccess = rt_cmpXchg32(&d->pMetaInfo->uNextBlock, uBlockNext, uBlockCur) == uBlockCur
+			&& rt_cmpXchg32(&pBlockMetaInfoCur->owner, d->uId, 0) == 0;
+
+		if (pBlockMetaInfo != 0 && (!bSuccess || uBlockCur != uBlockCurP))
+		{
+			pBlockMetaInfo->owner = 0;
+			pBlockMetaInfo = 0;
+		}
+
+		if (bSuccess)
 		{
 			if (pBlockMetaInfo != 0)
 			{
@@ -166,21 +176,12 @@ static void * EMTPool_alloc(PEMTPOOL pThis, const uint32_t uMemLen)
 				pBlockMetaInfo = pBlockMetaInfoCur;
 			}
 		}
-		else
-		{
-			if (pBlockMetaInfo != 0)
-			{
-				pBlockMetaInfo->owner = 0;
-				pBlockMetaInfo = 0;
-			}
-		}
 	}
 
 	if (pBlockMetaInfo->len > uBlocks)
 	{
-		const uint32_t uShrinkLen = pBlockMetaInfo->len - uBlocks;
 		PEMTPOOLBLOCKMETAINFO pBlockMetaInfoCur = pBlockMetaInfo + uBlocks;
-		pBlockMetaInfoCur->len = uShrinkLen;
+		pBlockMetaInfoCur->len = pBlockMetaInfo->len - uBlocks;
 		pBlockMetaInfoCur->owner = 0;
 		pBlockMetaInfo->len = uBlocks;
 	}
