@@ -4,6 +4,7 @@
 #include <EMTUtil/EMTThread.h>
 #include <EMTUtil/EMTShareMemory.h>
 #include <EMTUtil/EMTPool.h>
+#include <EMTUtil/EMTPoolSupport.h>
 
 #include <Windows.h>
 
@@ -16,7 +17,13 @@ enum
 	kDefaultTimeout = 5000,
 	kBufferSize = 512,
 	kMemoryPoolSize = 8 * 1024 * 1024,
-	kMemoryBlockSize = 4 * 1024,
+	kMemoryPoolSizeSmall = 2 * 1024 * 1024,
+	kMemoryPoolSizeBig = kMemoryPoolSize - kMemoryPoolSizeSmall,
+	kMemoryBlockSizeLimitFactor = 4,
+	kMemoryBlockSizeSmall = 4 * 1024,
+	kMemoryBlockSizeSmallLimit = kMemoryBlockSizeSmall * kMemoryBlockSizeLimitFactor,
+	kMemoryBlockSizeBig = 64 * 1024,
+	kMemoryBlockSizeBigLimit = kMemoryBlockSizeBig * kMemoryBlockSizeLimitFactor,
 };
 
 enum
@@ -45,14 +52,25 @@ struct EMTPipeProto : EMTPipeProtoBase
 
 struct EMTPipeProtoHandshake : public EMTPipeProto<kEMTPipeProtoHandshake, EMTPipeProtoHandshake>
 {
-	EMTPipeProtoHandshake(uint32_t poolId) : poolId(poolId) { }
+	EMTPipeProtoHandshake(const uint32_t poolId) : poolId(poolId) { }
 
 	uint32_t poolId;
 };
 
 struct EMTPipeProtoTransfer : public EMTPipeProto<kEMTPipeProtoTransfer, EMTPipeProtoTransfer>
 {
+	EMTPipeProtoTransfer() { }
+};
 
+struct EMTIPCBlock
+{
+	uint32_t poolId;
+	uint32_t token;
+};
+
+struct EMTIPCTransfer
+{
+	void * buf;
 };
 
 class EMTIPC : public IEMTIPC, public IEMTPipeHandler
@@ -102,7 +120,7 @@ private:
 	IEMTIPCHandler * mIPCHandler;
 	std::unique_ptr<IEMTPipe, IEMTUnknown_Delete> mPipe;
 	std::unique_ptr<IEMTShareMemory, IEMTUnknown_Delete> mShareMemory;
-	EMTPOOL mPool;
+	std::unique_ptr<IEMTMultiPool, IEMTUnknown_Delete> mPool;
 
 	bool mConnected;
 	uint32_t mRemoteId;
@@ -150,12 +168,12 @@ void EMTIPC::disconnect()
 
 void * EMTIPC::alloc(const uint32_t len)
 {
-	return mPool.alloc(&mPool, len);
+	return mPool->alloc(len);
 }
 
 void EMTIPC::free(void * buf)
 {
-	mPool.free(&mPool, buf);
+	mPool->free(buf);
 }
 
 void EMTIPC::send(void * buf)
@@ -163,19 +181,25 @@ void EMTIPC::send(void * buf)
 	if (!mThread->isCurrentThread())
 		return mThread->queue(createEMTRunnable(std::bind(&EMTIPC::send, this, buf)));
 
-	const uint32_t len = sizeof(EMTPipeProtoTransfer) + sizeof(uint32_t);
+	const uint32_t protoLen = sizeof(EMTPipeProtoTransfer) + sizeof(EMTIPCBlock);
+	const uint32_t len = protoLen + sizeof(EMTIPCTransfer);
 	EMTPipeProtoTransfer * p = new (malloc(len)) EMTPipeProtoTransfer;
-	p->len = len;
+	p->len = protoLen;
 
-	uint32_t * t = (uint32_t *)(p + 1);
-	*t = mPool.transfer(&mPool, buf, mRemoteId);
+	EMTIPCTransfer * f = (EMTIPCTransfer *)((uint8_t *)p) + protoLen;
+	f->buf = buf;
 
+	EMTIPCBlock * t = (EMTIPCBlock *)(p + 1);
+
+	const bool partial = mPool->transfer(buf, mRemoteId, &t->token, &t->poolId);
 	sendPack(p);
+	if (partial)
+		mPool->transferPartial(buf, mRemoteId, &t->token, &t->poolId);
 }
 
 void EMTIPC::connected()
 {
-	sendPack(new EMTPipeProtoHandshake(mPool.id(&mPool)));
+	sendPack(new EMTPipeProtoHandshake(mPool->id()));
 }
 
 void EMTIPC::disconnected()
@@ -248,10 +272,10 @@ void EMTIPC::received(EMTPipeProtoHandshake & p)
 
 void EMTIPC::received(EMTPipeProtoTransfer & p)
 {
-	const uint32_t count = (p.len - sizeof(p)) / sizeof(uint32_t);
-	uint32_t * t = (uint32_t *)(&p + 1);
+	const uint32_t count = (p.len - sizeof(p)) / sizeof(EMTIPCBlock);
+	EMTIPCBlock * t = (EMTIPCBlock *)(&p + 1);
 
-	mIPCHandler->received(mPool.take(&mPool, *t));
+	mIPCHandler->received(mPool->take(t->token, t->poolId));
 }
 
 void EMTIPC::sent(EMTPipeProtoHandshake & p)
@@ -260,10 +284,10 @@ void EMTIPC::sent(EMTPipeProtoHandshake & p)
 
 void EMTIPC::sent(EMTPipeProtoTransfer & p)
 {
-	const uint32_t count = (p.len - sizeof(p)) / sizeof(uint32_t);
-	uint32_t * t = (uint32_t *)(&p + 1);
+	const uint32_t count = (p.len - sizeof(p)) / sizeof(EMTIPCBlock);
+	EMTIPCTransfer * f = (EMTIPCTransfer *)((uint8_t *)&p + p.len);
 
-	mIPCHandler->sent(mPool.take(&mPool, *t));
+	mIPCHandler->sent(f->buf);
 }
 
 void EMTIPC::sendPack(EMTPipeProtoBase * pack)
@@ -280,7 +304,8 @@ void EMTIPC::createPool(const wchar_t * fullname)
 
 	void * shareMemory = mShareMemory->open(fullname, kMemoryPoolSize);
 
-	constructEMTPool(&mPool, shareMemory, mShareMemory->length(), kMemoryBlockSize);
+	mPool.reset(createEMTMultiPool());
+	mPool->init(shareMemory);
 }
 
 void EMTIPC::deletePool()
@@ -288,7 +313,7 @@ void EMTIPC::deletePool()
 	if (!mShareMemory)
 		return;
 
-	destructEMTPool(&mPool);
+	mPool.release();
 	mShareMemory.release();
 }
 

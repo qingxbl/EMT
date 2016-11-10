@@ -11,6 +11,11 @@ typedef struct _EMTPOOL EMTPOOL, *PEMTPOOL;
 struct _EMTPOOL
 {
 	const uint32_t (*id)(PEMTPOOL pThis);
+	void * (*address)(PEMTPOOL pThis);
+	const uint32_t (*memLength)(PEMTPOOL pThis);
+	const uint32_t (*blockLength)(PEMTPOOL pThis);
+
+	const uint32_t (*length)(PEMTPOOL pThis, void * pMem);
 
 	void * (*alloc)(PEMTPOOL pThis, const uint32_t uMemLen);
 	void (*free)(PEMTPOOL pThis, void * pMem);
@@ -22,7 +27,7 @@ struct _EMTPOOL
 	uint8_t reserved[32];
 };
 
-EXTERN_C void constructEMTPool(PEMTPOOL pEMTPool, void * pMem, const uint32_t uMemLen, const uint32_t uBlockLen);
+EXTERN_C void constructEMTPool(PEMTPOOL pEMTPool, const uint32_t id, void * pMem, const uint32_t uMetaOffset, const uint32_t uMemLen, const uint32_t uBlockLen);
 EXTERN_C void destructEMTPool(PEMTPOOL pEMTPool);
 
 EXTERN_C void * rt_memset(void *mem, const int val, const uint32_t size);

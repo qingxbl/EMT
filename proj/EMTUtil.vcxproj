@@ -45,6 +45,7 @@
   <ItemGroup>
     <ClInclude Include="..\src\EMTUtil\EMTPool.h" />
     <ClInclude Include="..\src\EMTUtil\EMTPipe.h" />
+    <ClInclude Include="..\src\EMTUtil\EMTPoolSupport.h" />
     <ClInclude Include="..\src\EMTUtil\EMTShareMemory.h" />
     <ClInclude Include="..\src\EMTUtil\EMTThread.h" />
     <ClInclude Include="..\src\EMTUtil\stable.h" />
