@@ -227,7 +227,18 @@ static void EMTPool_free(PEMTPOOL pThis, void * pMem)
 
 void EMTPool_freeAll(PEMTPOOL pThis, const uint32_t uId)
 {
+	EMT_D(EMTPOOL);
+	PEMTPOOLBLOCKMETA pBlockMetaCur = d->pBlockMeta;
+	PEMTPOOLBLOCKMETA pBlockMetaEnd = d->pBlockMeta + d->pMeta->uBlockCount;
 
+	do
+	{
+		PEMTPOOLBLOCKMETA pBlockMeta = pBlockMetaCur;
+		pBlockMetaCur += pBlockMeta->len;
+
+		if (pBlockMeta->owner == uId)
+			pBlockMeta->owner = 0;
+	} while (pBlockMetaCur < pBlockMetaEnd);
 }
 
 static const uint32_t EMTPool_transfer(PEMTPOOL pThis, void * pMem, const uint32_t uToId)
