@@ -12,12 +12,12 @@ enum
 	kEMTPoolNotOwner,
 };
 
-static void EMTPool_construct(PEMTPOOL pThis, const uint32_t id, void * pMem, const uint32_t uMetaOffset, const uint32_t uMemLen, const uint32_t uBlockLen);
+static uint32_t EMTPool_construct(PEMTPOOL pThis, const uint32_t uBlockCount);
 static void EMTPool_destruct(PEMTPOOL pThis);
-static void EMTPool_init(PEMTPOOL pThis, const uint32_t uMemLen, const uint32_t uBlockLen);
+static void EMTPool_init(PEMTPOOL pThis, const uint32_t uId, const uint32_t uBlockLen, void * pMeta, void * pPool);
 static const uint32_t EMTPool_id(PEMTPOOL pThis);
 static void * EMTPool_address(PEMTPOOL pThis);
-static const uint32_t EMTPool_memLength(PEMTPOOL pThis);
+static const uint32_t EMTPool_poolLength(PEMTPOOL pThis);
 static const uint32_t EMTPool_blockLength(PEMTPOOL pThis);
 static const uint32_t EMTPool_length(PEMTPOOL pThis, void * pMem);
 static void * EMTPool_alloc(PEMTPOOL pThis, const uint32_t uMemLen);
@@ -32,7 +32,7 @@ typedef struct _EMTPOOLMETA EMTPOOLMETA, *PEMTPOOLMETA;
 
 struct _EMTPOOLPRIVATE
 {
-	void * pMem;
+	void * pPool;
 
 	PEMTPOOLMETA pMeta;
 	PEMTPOOLBLOCKMETA pBlockMeta;
@@ -51,10 +51,7 @@ struct _EMTPOOLMETA
 {
 	volatile uint32_t uNextBlock;
 
-	uint32_t uMemLen;
 	uint32_t uBlockLen;
-
-	uint32_t uBlockStart;
 	uint32_t uBlockCount;
 };
 
@@ -66,7 +63,7 @@ static const uint32_t EMTPool_blockFromAddress(PEMTPOOL pThis, void * pMem)
 {
 	EMT_D(EMTPOOL);
 
-	return (uint32_t)(((uint8_t *)pMem - (uint8_t *)d->pMem) / d->pMeta->uBlockLen);
+	return ((uint8_t *)pMem - (uint8_t *)d->pPool) / d->pMeta->uBlockLen;
 }
 
 static int32_t EMTPool_validation(PEMTPOOL pThis, void * pMem)
@@ -75,7 +72,7 @@ static int32_t EMTPool_validation(PEMTPOOL pThis, void * pMem)
 	const uint32_t uBlock = EMTPool_blockFromAddress(pThis, pMem);
 	PEMTPOOLBLOCKMETA pBlockMeta = d->pBlockMeta + uBlock;
 
-	if (uBlock < d->pMeta->uBlockStart || uBlock >= d->pMeta->uBlockCount)
+	if (uBlock >= d->pMeta->uBlockCount)
 		return kEMTPoolOutOfRange;
 
 	//if (pBlockMeta->owner != d->uId)
@@ -84,13 +81,14 @@ static int32_t EMTPool_validation(PEMTPOOL pThis, void * pMem)
 	return kEMTPoolNoError;
 }
 
-static void EMTPool_construct(PEMTPOOL pThis, const uint32_t id, void * pMem, const uint32_t uMetaOffset, const uint32_t uMemLen, const uint32_t uBlockLen)
+static uint32_t EMTPool_construct(PEMTPOOL pThis, const uint32_t uBlockCount)
 {
 	EMT_D(EMTPOOL);
 
+	pThis->init = EMTPool_init;
 	pThis->id = EMTPool_id;
 	pThis->address = EMTPool_address;
-	pThis->memLength = EMTPool_memLength;
+	pThis->poolLength = EMTPool_poolLength;
 	pThis->blockLength = EMTPool_blockLength;
 	pThis->length = EMTPool_length;
 	pThis->alloc = EMTPool_alloc;
@@ -98,12 +96,9 @@ static void EMTPool_construct(PEMTPOOL pThis, const uint32_t id, void * pMem, co
 	pThis->transfer = EMTPool_transfer;
 	pThis->take = EMTPool_take;
 
-	d->uId = id;
-	d->pMem = pMem;
-	d->pMeta = (PEMTPOOLMETA)((char *)d->pMem + uMetaOffset);
-	d->pBlockMeta = (PEMTPOOLBLOCKMETA)(d->pMeta + 1);
+	d->uId = uBlockCount;
 
-	EMTPool_init(pThis, uMemLen, uBlockLen);
+	return sizeof(*d->pMeta) + sizeof(*d->pBlockMeta) * uBlockCount;
 }
 
 static void EMTPool_destruct(PEMTPOOL pThis)
@@ -113,25 +108,30 @@ static void EMTPool_destruct(PEMTPOOL pThis)
 	EMTPool_freeAll(pThis, d->uId);
 }
 
-static void EMTPool_init(PEMTPOOL pThis, const uint32_t uMemLen, const uint32_t uBlockLen)
+static void EMTPool_init(PEMTPOOL pThis, const uint32_t uId, const uint32_t uBlockLen, void * pMeta, void * pPool)
 {
 	EMT_D(EMTPOOL);
+	volatile uint32_t * pInitStatus;
+	uint32_t uMagicNum;
+	const uint32_t uBlockCount = d->uId;
 
-	const uint32_t uMagicNum = rt_cmpXchg32(&d->pMeta->uNextBlock, kEMTPoolMagicNumInit, kEMTPoolMagicNumUninit);
-	while (uMagicNum != kEMTPoolMagicNumUninit && d->pMeta->uNextBlock == kEMTPoolMagicNumInit);
+	d->pMeta = (PEMTPOOLMETA)pMeta;
+	d->pBlockMeta = (PEMTPOOLBLOCKMETA)(d->pMeta + 1);
+	d->pPool = pPool;
+	d->uId = uId;
+
+	pInitStatus = &d->pMeta->uBlockLen;
+
+	uMagicNum = rt_cmpXchg32(pInitStatus, kEMTPoolMagicNumInit, kEMTPoolMagicNumUninit);
+	while (uMagicNum != kEMTPoolMagicNumUninit && *pInitStatus == kEMTPoolMagicNumInit);
 
 	if (uMagicNum != kEMTPoolMagicNumUninit)
 		return;
 
-	d->pMeta->uMemLen = uMemLen;
 	d->pMeta->uBlockLen = uBlockLen;
-	d->pMeta->uBlockCount = d->pMeta->uMemLen / d->pMeta->uBlockLen;
-	d->pMeta->uBlockStart = (sizeof(*d->pMeta) + d->pMeta->uBlockCount * sizeof(*d->pBlockMeta) + uBlockLen - 1) / uBlockLen;
-
+	d->pMeta->uBlockCount = uBlockCount;
 	rt_memset(d->pBlockMeta, 0, d->pMeta->uBlockCount * sizeof(*d->pBlockMeta));
-	d->pBlockMeta[d->pMeta->uBlockStart].len = d->pMeta->uBlockCount - d->pMeta->uBlockStart;
-
-	d->pMeta->uNextBlock = d->pMeta->uBlockStart;
+	d->pBlockMeta->len = d->pMeta->uBlockCount;
 }
 
 static const uint32_t EMTPool_id(PEMTPOOL pThis)
@@ -143,13 +143,13 @@ static const uint32_t EMTPool_id(PEMTPOOL pThis)
 static void * EMTPool_address(PEMTPOOL pThis)
 {
 	EMT_D(EMTPOOL);
-	return d->pMem;
+	return d->pPool;
 }
 
-static const uint32_t EMTPool_memLength(PEMTPOOL pThis)
+static const uint32_t EMTPool_poolLength(PEMTPOOL pThis)
 {
 	EMT_D(EMTPOOL);
-	return d->pMeta->uMemLen;
+	return d->pMeta->uBlockLen * d->pMeta->uBlockCount;
 }
 
 static const uint32_t EMTPool_blockLength(PEMTPOOL pThis)
@@ -175,9 +175,9 @@ static void * EMTPool_alloc(PEMTPOOL pThis, const uint32_t uMemLen)
 	while (pBlockMeta == 0 || pBlockMeta->len < uBlocks)
 	{
 		const uint32_t uBlockCurP = pBlockMeta ? pBlockMeta - d->pBlockMeta + pBlockMeta->len : d->pMeta->uNextBlock;
-		const uint32_t uBlockCur = EMT_ROUNDTRIP(uBlockCurP, d->pMeta->uBlockStart, d->pMeta->uBlockCount);
+		const uint32_t uBlockCur = EMT_ROUNDTRIP(uBlockCurP, 0, d->pMeta->uBlockCount);
 		PEMTPOOLBLOCKMETA pBlockMetaCur = d->pBlockMeta + uBlockCur;
-		const uint32_t uBlockNext = EMT_ROUNDTRIP(uBlockCur + pBlockMetaCur->len, d->pMeta->uBlockStart, d->pMeta->uBlockCount);
+		const uint32_t uBlockNext = EMT_ROUNDTRIP(uBlockCur + pBlockMetaCur->len, 0, d->pMeta->uBlockCount);
 
 		const uint32_t bSuccess = rt_cmpXchg32(&d->pMeta->uNextBlock, uBlockNext, uBlockCur) == uBlockCur
 			&& rt_cmpXchg32(&pBlockMetaCur->owner, d->uId, 0) == 0;
@@ -210,7 +210,7 @@ static void * EMTPool_alloc(PEMTPOOL pThis, const uint32_t uMemLen)
 	}
 
 	pBlockMeta->allocLen = uMemLen;
-	return (uint8_t *)d->pMem + (pBlockMeta - d->pBlockMeta) * d->pMeta->uBlockLen;
+	return (uint8_t *)d->pPool + d->pMeta->uBlockLen * (pBlockMeta - d->pBlockMeta);
 }
 
 static void EMTPool_free(PEMTPOOL pThis, void * pMem)
@@ -247,7 +247,7 @@ static const uint32_t EMTPool_transfer(PEMTPOOL pThis, void * pMem, const uint32
 static void * EMTPool_take(PEMTPOOL pThis, const uint32_t uToken)
 {
 	EMT_D(EMTPOOL);
-	void * pMem = (uint8_t *)d->pMem + uToken * d->pMeta->uBlockLen;
+	void * pMem = (uint8_t *)d->pPool + uToken * d->pMeta->uBlockLen;
 
 	if (EMTPool_validation(pThis, pMem) != kEMTPoolNoError)
 		return 0;
@@ -255,9 +255,9 @@ static void * EMTPool_take(PEMTPOOL pThis, const uint32_t uToken)
 	return pMem;
 }
 
-void constructEMTPool(PEMTPOOL pEMTPool, const uint32_t id, void * pMem, const uint32_t uMetaOffset, const uint32_t uMemLen, const uint32_t uBlockLen)
+uint32_t constructEMTPool(PEMTPOOL pEMTPool, const uint32_t uBlockCount)
 {
-	EMTPool_construct(pEMTPool, id, pMem, uMetaOffset, uMemLen, uBlockLen);
+	return EMTPool_construct(pEMTPool, uBlockCount);
 }
 
 void destructEMTPool(PEMTPOOL pEMTPool)
