@@ -16,6 +16,7 @@ struct _EMTPOOL
 	void * (*address)(PEMTPOOL pThis);
 	const uint32_t (*poolLength)(PEMTPOOL pThis);
 	const uint32_t (*blockLength)(PEMTPOOL pThis);
+	const uint32_t (*blockCount)(PEMTPOOL pThis);
 
 	const uint32_t (*length)(PEMTPOOL pThis, void * pMem);
 
@@ -33,7 +34,6 @@ EXTERN_C uint32_t constructEMTPool(PEMTPOOL pEMTPool, const uint32_t uBlockCount
 EXTERN_C void destructEMTPool(PEMTPOOL pEMTPool);
 
 EXTERN_C void * rt_memset(void *mem, const int val, const uint32_t size);
-EXTERN_C uint16_t rt_cmpXchg16(volatile uint16_t *dest, uint16_t exchg, uint16_t comp);
 EXTERN_C uint32_t rt_cmpXchg32(volatile uint32_t *dest, uint32_t exchg, uint32_t comp);
 
 #endif // __EMTPOOL_H__
