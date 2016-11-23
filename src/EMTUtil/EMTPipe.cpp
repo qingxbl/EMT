@@ -64,6 +64,7 @@ protected: // IEMTWaitable
 
 private:
 	uint32_t receive();
+	void disconnectWithNotify();
 
 	void received(DWORD errorCode, DWORD numberOfBytesTransfered, OVERLAPPED_EMTPipe * overlapped);
 	void sent(DWORD errorCode, DWORD numberOfBytesTransfered, OVERLAPPED_EMTPipe * overlapped);
@@ -118,12 +119,12 @@ EMTPipe::EMTPipe(IEMTThread * thread, IEMTPipeHandler * pipeHandler, const uint3
 
 EMTPipe::~EMTPipe()
 {
-	disconnect();
+	disconnectWithNotify();
 }
 
 bool EMTPipe::isConnected()
 {
-	return mPipe != INVALID_HANDLE_VALUE && mOverlapped.hEvent == INVALID_HANDLE_VALUE;
+	return mPipe != INVALID_HANDLE_VALUE && mOverlapped.hEvent == INVALID_HANDLE_VALUE && ::GetNamedPipeHandleState(mPipe, NULL, NULL, NULL, NULL, NULL, NULL) != FALSE;
 }
 
 bool EMTPipe::listen(const wchar_t * name)
@@ -253,6 +254,16 @@ uint32_t EMTPipe::receive()
 	return ERROR_SUCCESS;
 }
 
+void EMTPipe::disconnectWithNotify()
+{
+	HANDLE pipe = mPipe;
+
+	disconnect();
+
+	if (pipe != INVALID_HANDLE_VALUE)
+		mPipeHandler->disconnected();
+}
+
 void EMTPipe::received(DWORD errorCode, DWORD numberOfBytesTransfered, OVERLAPPED_EMTPipe * overlapped)
 {
 	if (!handleError(errorCode))
@@ -280,8 +291,8 @@ bool EMTPipe::handleError(DWORD errorCode)
 	case ERROR_SUCCESS:
 		return true;
 	case ERROR_BROKEN_PIPE:
-		disconnect();
-		mPipeHandler->disconnected();
+	case ERROR_INVALID_HANDLE:
+		disconnectWithNotify();
 		return false;
 	default:
 		::MessageBox(NULL, L"", NULL, 0);
