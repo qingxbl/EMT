@@ -14,11 +14,11 @@ typedef struct _EMTMULTIPOOL EMTMULTIPOOL, *PEMTMULTIPOOL;
 
 struct _EMTMULTIPOOLCONFIG
 {
-	EMTPOOL sPool;
-
 	uint32_t uBlockLength;
 	uint32_t uBlockCount;
 	uint32_t uBlockLimit;
+
+	EMTPOOL sPool;
 
 	uint8_t reserved[4];
 };
@@ -29,6 +29,9 @@ struct _EMTMULTIPOOL
 
 	const uint32_t (*id)(PEMTMULTIPOOL pThis);
 	const PEMTPOOL (*pool)(PEMTMULTIPOOL pThis, const uint32_t uPool);
+
+	const PEMTPOOL (*poolByMem)(PEMTMULTIPOOL pThis, void * pMem);
+	const uint32_t (*length)(PEMTMULTIPOOL pThis, void * pMem);
 
 	void * (*alloc)(PEMTMULTIPOOL pThis, const uint32_t uMemLen);
 	void (*free)(PEMTMULTIPOOL pThis, void * pMem);
@@ -42,7 +45,7 @@ struct _EMTMULTIPOOL
 	uint32_t uPoolCount;
 };
 
-EXTERN_C uint32_t constructEMTMultiPool(PEMTMULTIPOOL pEMTPool);
+EXTERN_C uint32_t constructEMTMultiPool(PEMTMULTIPOOL pEMTPool, uint32_t * pMemLen);
 EXTERN_C void destructEMTMultiPool(PEMTMULTIPOOL pEMTPool);
 
 #endif // __EMTMULTIPOOL_H__
