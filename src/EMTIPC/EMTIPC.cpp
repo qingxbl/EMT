@@ -134,7 +134,7 @@ private:
 	void createPool(const wchar_t * name);
 	void deletePool();
 
-	void sendPartial(const EMTPipeProtoPartialTransfer & p);
+	void sendPartial(EMTPipeProtoPartialTransfer * p);
 	void receivePartial(const EMTPipeProtoPartialTransfer & p);
 
 private:
@@ -223,7 +223,7 @@ void EMTIPC::send(void * buf)
 	if (!mPool->poolByMem(mPool.get(), buf))
 	{
 		const uint32_t bufLen = (((EMTIPCMemoryBlock *)buf) - 1)->length;
-		return sendPartial(*std::unique_ptr<EMTPipeProtoPartialTransfer>(new EMTPipeProtoPartialTransfer(bufLen, buf)));
+		return sendPartial(new (malloc(kBufferSize)) EMTPipeProtoPartialTransfer(bufLen, buf));
 	}
 
 	const uint32_t len = sizeof(EMTPipeProtoTransfer) + sizeof(EMTIPCTrasferData);
@@ -328,7 +328,7 @@ void EMTIPC::received(EMTPipeProtoPartialTransfer & p)
 	if (p.start != p.end)
 		receivePartial(p);
 	else
-		sendPartial(p);
+		sendPartial(new (malloc(kBufferSize)) EMTPipeProtoPartialTransfer(p));
 }
 
 void EMTIPC::sent(EMTPipeProtoHandshake & p)
@@ -370,7 +370,7 @@ void EMTIPC::createPool(const wchar_t * fullname)
 	multiPool->uPoolCount = _ARRAYSIZE(multiPoolConfig);
 	memcpy(multiPool + 1, multiPoolConfig, sizeof(multiPoolConfig));
 	uint32_t memLength = 0;
-	const uint32_t metaLength = (constructEMTMultiPool(multiPool, &memLength) + kPageMask) / kPageSize;
+	const uint32_t metaLength = (constructEMTMultiPool(multiPool, &memLength) + kPageMask) & ~kPageMask;
 
 	void * shareMemory = mShareMemory->open(fullname, metaLength + memLength);
 
@@ -384,42 +384,46 @@ void EMTIPC::deletePool()
 	if (!mShareMemory)
 		return;
 
-	mPool.release();
-	mShareMemory.release();
+	mPool.reset();
+	mShareMemory.reset();
 }
 
-void EMTIPC::sendPartial(const EMTPipeProtoPartialTransfer & p)
+void EMTIPC::sendPartial(EMTPipeProtoPartialTransfer * p)
 {
-	EMTPipeProtoPartialTransfer * np = new (malloc(kBufferSize)) EMTPipeProtoPartialTransfer(p);
+	EMTIPCTrasferData * t = (EMTIPCTrasferData *)(p + 1);
+	EMTIPCTrasferData * tend = (EMTIPCTrasferData *)((uint8_t *)p + kBufferSize);
 
-	EMTIPCTrasferData * t = (EMTIPCTrasferData *)(np + 1);
-	EMTIPCTrasferData * tend = (EMTIPCTrasferData *)((uint8_t *)np + kBufferSize);
-
-	for (; t < tend && np->end < np->total; ++t)
+	for (; t < tend && p->end < p->total; ++t)
 	{
-		const uint32_t blockLen = min(np->total - np->end, kBlockLineraMax);
+		const uint32_t blockLen = min(p->total - p->end, kBlockLineraMax);
 		void * buf = mPool->alloc(mPool.get(), blockLen);
 		if (!buf)
 			break;
 
-		memcpy(buf, (uint8_t *)np->senderHandle + np->end, blockLen);
-		np->end += blockLen;
+		memcpy(buf, (uint8_t *)p->senderHandle + p->end, blockLen);
+		p->end += blockLen;
+		p->len += sizeof(*t);
 		t->token = mPool->transfer(mPool.get(), buf, mRemoteId);
 	}
 
-	np->len = (uint8_t *)t - (uint8_t *)np;
-	sendPack(np);
+	if (p->len != sizeof(*p))
+	{
+		sendPack(p);
+	}
+	else
+	{
+		mThread->queue(createEMTRunnable(std::bind(&EMTIPC::sendPartial, this, p)));
+	}
 }
 
 void EMTIPC::receivePartial(const EMTPipeProtoPartialTransfer & p)
 {
-	const bool isTransferEnded = p.end == p.total;
 	void * mem;
 
-	if (p.receiverHandle != 0 || !isTransferEnded)
+	if (p.start != 0 || p.len != sizeof(p) + sizeof(EMTIPCTrasferData) || p.end != p.total)
 	{
 		uint32_t start = p.start;
-		mem = (p.receiverHandle ? (void *)p.receiverHandle : (uint8_t *)malloc(p.total));
+		mem = (p.receiverHandle ? (void *)p.receiverHandle : (uint8_t *)alloc(p.total));
 
 		std::for_each((EMTIPCTrasferData *)(&p + 1), (EMTIPCTrasferData *)(&p + 1) + ((p.len - sizeof(p)) / sizeof(EMTIPCTrasferData)), [&](const EMTIPCTrasferData & t)
 		{
@@ -438,13 +442,14 @@ void EMTIPC::receivePartial(const EMTPipeProtoPartialTransfer & p)
 		mem = mPool->take(mPool.get(), t->token);
 	}
 
-	if (isTransferEnded)
+	if (p.end == p.total)
 	{
 		mIPCHandler->received(mem);
 	}
 	else
 	{
 		EMTPipeProtoPartialTransfer * np = new EMTPipeProtoPartialTransfer(p);
+		np->len = sizeof(EMTPipeProtoPartialTransfer);
 		np->start = p.end;
 		np->receiverHandle = (uintptr_t)mem;
 		sendPack(np);
