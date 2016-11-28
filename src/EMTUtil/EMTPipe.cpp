@@ -8,6 +8,23 @@
 
 BEGIN_NAMESPACE_ANONYMOUS
 
+static void createEvent(PHANDLE h)
+{
+	if (*h != INVALID_HANDLE_VALUE)
+		return;
+
+	*h = ::CreateEventW(NULL, TRUE, FALSE, NULL);
+}
+
+static void closeHandle(PHANDLE h)
+{
+	if (*h == INVALID_HANDLE_VALUE)
+		return;
+
+	::CloseHandle(*h);
+	*h = INVALID_HANDLE_VALUE;
+}
+
 template <class T>
 struct OVERLAPPEDEX : public OVERLAPPED
 {
@@ -35,7 +52,15 @@ static void destroyOverlappedEx(OVERLAPPEDEX<T> * pThis)
 	free(pThis);
 }
 
-class EMTPipe : public IEMTPipe, public IEMTWaitable
+enum
+{
+	kEMTPipeDisconnected,
+	kEMTPipeDisconnecting,
+	kEMTPipeConnected,
+	kEMTPipeConnecting,
+};
+
+class EMTPipe : public IEMTPipe
 {
 	IMPL_IEMTUNKNOWN;
 
@@ -46,6 +71,10 @@ public:
 	explicit EMTPipe(IEMTThread * thread, IEMTPipeHandler * pipeHandler, const uint32_t bufferSize, const uint32_t timeout);
 	virtual ~EMTPipe();
 
+	IEMTThread * thread() const { return mThread; }
+
+	void connected();
+
 protected: // IEMTPipe
 	virtual bool isConnected();
 
@@ -54,13 +83,6 @@ protected: // IEMTPipe
 	virtual void disconnect();
 
 	virtual void send(void * buf, const uint32_t len);
-
-protected: // IEMTRunnable
-	virtual void run();
-	virtual bool isAutoDestroy();
-
-protected: // IEMTWaitable
-	virtual void * waitHandle();
 
 private:
 	uint32_t receive();
@@ -81,30 +103,32 @@ private:
 	const uint32_t mBufferSize;
 	const uint32_t mTimeout;
 	HANDLE mPipe;
+	uint32_t mStatus;
 
-	OVERLAPPED mOverlapped;
+	std::unique_ptr<IEMTWaitable, IEMTUnknown_Delete> mWaitConnect;
 };
 
-static void createEvent(PHANDLE ev)
+class EMTPipeWaitConnect : public IEMTWaitable
 {
-	if (*ev != INVALID_HANDLE_VALUE)
-		return;
+	IMPL_IEMTUNKNOWN;
 
-	*ev = ::CreateEventW(
-		NULL,    // default security attribute
-		TRUE,    // manual reset event
-		FALSE,   // initial state = signaled
-		NULL);   // unnamed event object
-}
+public:
+	explicit EMTPipeWaitConnect(EMTPipe * pipe);
+	virtual ~EMTPipeWaitConnect();
 
-static void closeHandle(PHANDLE h)
-{
-	if (*h == INVALID_HANDLE_VALUE)
-		return;
+	LPOVERLAPPED overlapped();
 
-	::CloseHandle(*h);
-	*h = INVALID_HANDLE_VALUE;
-}
+protected: // IEMTRunnable
+	virtual void run();
+	virtual bool isAutoDestroy();
+
+protected: // IEMTWaitable
+	virtual void * waitHandle();
+
+private:
+	EMTPipe * mPipe;
+	OVERLAPPED mOverlapped;
+};
 
 EMTPipe::EMTPipe(IEMTThread * thread, IEMTPipeHandler * pipeHandler, const uint32_t bufferSize, const uint32_t timeout)
 	: mThread(thread)
@@ -112,9 +136,9 @@ EMTPipe::EMTPipe(IEMTThread * thread, IEMTPipeHandler * pipeHandler, const uint3
 	, mBufferSize(bufferSize)
 	, mTimeout(timeout)
 	, mPipe(INVALID_HANDLE_VALUE)
+	, mStatus(kEMTPipeDisconnected)
 {
-	memset(&mOverlapped, 0, sizeof(mOverlapped));
-	mOverlapped.hEvent = INVALID_HANDLE_VALUE;
+
 }
 
 EMTPipe::~EMTPipe()
@@ -122,14 +146,24 @@ EMTPipe::~EMTPipe()
 	disconnectWithNotify();
 }
 
+void EMTPipe::connected()
+{
+	mWaitConnect.release();
+
+	mStatus = kEMTPipeConnected;
+	mPipeHandler->connected();
+
+	EMTPipe::handleError(receive());
+}
+
 bool EMTPipe::isConnected()
 {
-	return mPipe != INVALID_HANDLE_VALUE && mOverlapped.hEvent == INVALID_HANDLE_VALUE && ::GetNamedPipeHandleState(mPipe, NULL, NULL, NULL, NULL, NULL, NULL) != FALSE;
+	return mStatus == kEMTPipeConnected && ::GetNamedPipeHandleState(mPipe, NULL, NULL, NULL, NULL, NULL, NULL) != FALSE;
 }
 
 bool EMTPipe::listen(const wchar_t * name)
 {
-	if (mPipe != INVALID_HANDLE_VALUE)
+	if (mStatus != kEMTPipeDisconnected)
 		return false;
 
 	mPipe = ::CreateNamedPipeW(
@@ -148,31 +182,34 @@ bool EMTPipe::listen(const wchar_t * name)
 	if (mPipe == INVALID_HANDLE_VALUE)
 		return false;
 
-	createEvent(&mOverlapped.hEvent);
+	std::unique_ptr<EMTPipeWaitConnect, IEMTUnknown_Delete> waitConnect(new EMTPipeWaitConnect(this));
 
-	if (::ConnectNamedPipe(mPipe, &mOverlapped))
+	if (::ConnectNamedPipe(mPipe, waitConnect->overlapped()))
 		return false;
 
+	bool ret = true;
 	const DWORD err = ::GetLastError();
 	if (err == ERROR_PIPE_CONNECTED)
 	{
-		mThread->queue(this);
+		mThread->queue(waitConnect.get());
 	}
 	else if (err == ERROR_IO_PENDING)
 	{
-		mThread->registerWaitable(this);
+		mThread->registerWaitable(waitConnect.get());
 	}
 	else
 	{
-		return false;
+		ret = false;
 	}
 
-	return true;
+	mWaitConnect.reset(waitConnect.release());
+	mStatus = ret ? kEMTPipeConnecting : kEMTPipeDisconnected;
+	return ret;
 }
 
 bool EMTPipe::connect(const wchar_t * name)
 {
-	if (isConnected())
+	if (mStatus != kEMTPipeDisconnected)
 		return false;
 
 	do
@@ -199,7 +236,9 @@ bool EMTPipe::connect(const wchar_t * name)
 		if (!success)
 			break;
 
-		mThread->queue(this);
+		mStatus = kEMTPipeConnecting;
+		mWaitConnect.reset(new EMTPipeWaitConnect(this));
+		mThread->queue(mWaitConnect.get());
 
 		return true;
 	} while (true);
@@ -210,8 +249,11 @@ bool EMTPipe::connect(const wchar_t * name)
 
 void EMTPipe::disconnect()
 {
+	mWaitConnect.reset();
 	closeHandle(&mPipe);
-	closeHandle(&mOverlapped.hEvent);
+
+	if (mStatus != kEMTPipeDisconnected)
+		mStatus = kEMTPipeDisconnecting;
 }
 
 void EMTPipe::send(void * buf, const uint32_t len)
@@ -219,29 +261,6 @@ void EMTPipe::send(void * buf, const uint32_t len)
 	OVERLAPPED_EMTPipe * overlap = createOverlappedEx(this, len, buf);
 
 	::WriteFileEx(mPipe, overlap->buffer, overlap->len, overlap, &writeComplete);
-}
-
-void EMTPipe::run()
-{
-	closeHandle(&mOverlapped.hEvent);
-	memset(&mOverlapped, 0, sizeof(mOverlapped));
-	mOverlapped.hEvent = INVALID_HANDLE_VALUE;
-
-	mThread->unregisterWaitable(this);
-
-	mPipeHandler->connected();
-
-	EMTPipe::handleError(receive());
-}
-
-bool EMTPipe::isAutoDestroy()
-{
-	return false;
-}
-
-void * EMTPipe::waitHandle()
-{
-	return mOverlapped.hEvent;
 }
 
 uint32_t EMTPipe::receive()
@@ -256,12 +275,13 @@ uint32_t EMTPipe::receive()
 
 void EMTPipe::disconnectWithNotify()
 {
-	HANDLE pipe = mPipe;
-
 	disconnect();
 
-	if (pipe != INVALID_HANDLE_VALUE)
+	if (mStatus == kEMTPipeDisconnecting)
+	{
 		mPipeHandler->disconnected();
+		mStatus = kEMTPipeDisconnected;
+	}
 }
 
 void EMTPipe::received(DWORD errorCode, DWORD numberOfBytesTransfered, OVERLAPPED_EMTPipe * overlapped)
@@ -313,6 +333,42 @@ void EMTPipe::writeComplete(DWORD errorCode, DWORD numberOfBytesTransfered, LPOV
 	OVERLAPPED_EMTPipe * o = static_cast<OVERLAPPED_EMTPipe *>(overlapped);
 	o->context->sent(errorCode, numberOfBytesTransfered, o);
 	destroyOverlappedEx(o);
+}
+
+EMTPipeWaitConnect::EMTPipeWaitConnect(EMTPipe * pipe)
+	: mPipe(pipe)
+{
+	memset(&mOverlapped, 0, sizeof(mOverlapped));
+	mOverlapped.hEvent = INVALID_HANDLE_VALUE;
+}
+
+EMTPipeWaitConnect::~EMTPipeWaitConnect()
+{
+	if (mOverlapped.hEvent != INVALID_HANDLE_VALUE)
+		mPipe->thread()->unregisterWaitable(this);
+
+	closeHandle(&mOverlapped.hEvent);
+}
+
+LPOVERLAPPED EMTPipeWaitConnect::overlapped()
+{
+	createEvent(&mOverlapped.hEvent);
+	return &mOverlapped;
+}
+
+void EMTPipeWaitConnect::run()
+{
+	mPipe->connected();
+}
+
+bool EMTPipeWaitConnect::isAutoDestroy()
+{
+	return true;
+}
+
+void * EMTPipeWaitConnect::waitHandle()
+{
+	return mOverlapped.hEvent;
 }
 
 END_NAMESPACE_ANONYMOUS

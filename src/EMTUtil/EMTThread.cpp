@@ -87,7 +87,13 @@ uint32_t EMTWorkThread::exec()
 			const DWORD wakeup = rc - WAIT_OBJECT_0;
 			IEMTWaitable * waitable = mRegisteredWaitable[wakeup];
 			waitable->run();
-			if (std::find(mRegisteredWaitable.cbegin(), mRegisteredWaitable.cend(), waitable) != mRegisteredWaitable.cend())
+
+			if (waitable->isAutoDestroy())
+			{
+				unregisterWaitable(waitable);
+				waitable->destruct();
+			}
+			else if (std::find(mRegisteredWaitable.cbegin(), mRegisteredWaitable.cend(), waitable) != mRegisteredWaitable.cend())
 			{
 				PHANDLE handleWakeup = mRegsiteredHandles + wakeup;
 				PHANDLE handleEnd = mRegsiteredHandles + mRegisteredWaitable.size();
