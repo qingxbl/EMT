@@ -22,7 +22,7 @@ enum
 
 	kBlockLengthMax = 64 * 1024,
 	kBlockCountMax = 4,
-	kBlockLineraMax = kBlockLengthMax * kBlockCountMax,
+	kBlockLinearMax = kBlockLengthMax * kBlockCountMax,
 };
 
 enum
@@ -395,7 +395,7 @@ void EMTIPC::sendPartial(EMTPipeProtoPartialTransfer * p)
 
 	for (; t < tend && p->end < p->total; ++t)
 	{
-		const uint32_t blockLen = min(p->total - p->end, kBlockLineraMax);
+		const uint32_t blockLen = min(p->total - p->end, kBlockLinearMax);
 		void * buf = mPool->alloc(mPool.get(), blockLen);
 		if (!buf)
 			break;
@@ -423,7 +423,7 @@ void EMTIPC::receivePartial(const EMTPipeProtoPartialTransfer & p)
 	if (p.start != 0 || p.len != sizeof(p) + sizeof(EMTIPCTrasferData) || p.end != p.total)
 	{
 		uint32_t start = p.start;
-		mem = (p.receiverHandle ? (void *)p.receiverHandle : (uint8_t *)alloc(p.total));
+		mem = (p.receiverHandle ? (void *)p.receiverHandle : (uint8_t *)this->alloc(p.total));
 
 		std::for_each((EMTIPCTrasferData *)(&p + 1), (EMTIPCTrasferData *)(&p + 1) + ((p.len - sizeof(p)) / sizeof(EMTIPCTrasferData)), [&](const EMTIPCTrasferData & t)
 		{
