@@ -30,13 +30,13 @@ struct _EMTMULTIPOOLPRIVATE
 {
 	uint32_t uId;
 
+	uint32_t uBlockLimitLength;
+
 	PEMTMULTIPOOLMETA pMeta;
 	uint8_t * pMemMap;
 
 	void * pMem;
 	void * pMemEnd;
-
-	uint32_t uBlockLimitLength;
 };
 
 struct _EMTMULTIPOOLCONFIGPRIVATE
@@ -128,7 +128,7 @@ void EMTMultiPool_init(PEMTMULTIPOOL pThis, void * pMeta, void * pPool)
 	do
 	{
 		d->uId = d->pMeta->uNextId;
-	} while (rt_cmpXchg32(&d->pMeta->uNextId, d->uId + 1, d->uId) != d->uId);
+	} while (rt_cmpXchg32(&d->pMeta->uNextId, d->uId + 1, d->uId) != d->uId || d->uId == 0);
 
 	for (; poolConfig < poolConfigEnd; ++poolConfig)
 	{

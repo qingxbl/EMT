@@ -40,7 +40,7 @@ struct _EMTMULTIPOOL
 	const uint32_t (*transfer)(PEMTMULTIPOOL pThis, void * pMem, const uint32_t uToId);
 	void * (*take)(PEMTMULTIPOOL pThis, const uint32_t uToken);
 
-	uint8_t reserved[32];
+	uint8_t reserved[40];
 
 	uint32_t uPoolCount;
 };
