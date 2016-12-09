@@ -128,6 +128,7 @@ static void EMTPool_init(PEMTPOOL pThis, const uint32_t uId, const uint32_t uBlo
 	if (uMagicNum != kEMTPoolMagicNumUninit)
 		return;
 
+	d->pMeta->uNextBlock = 0;
 	d->pMeta->uBlockLen = uBlockLen;
 	d->pMeta->uBlockCount = uBlockCount;
 	rt_memset(d->pBlockMeta, 0, d->pMeta->uBlockCount * sizeof(*d->pBlockMeta));
