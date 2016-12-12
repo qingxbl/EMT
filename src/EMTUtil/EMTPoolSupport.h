@@ -1,6 +1,6 @@
 /*
-* EMT - Enhanced Memory Transfer (not emiria-tan)
-*/
+ * EMT - Enhanced Memory Transfer (not emiria-tan)
+ */
 
 #ifndef __EMTPOOLSUPPORT_H__
 #define __EMTPOOLSUPPORT_H__
