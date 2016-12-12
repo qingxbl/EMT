@@ -43,6 +43,8 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="..\src\EMTUtil\EMTCore.h" />
+    <ClInclude Include="..\src\EMTUtil\EMTLinkList.h" />
     <ClInclude Include="..\src\EMTUtil\EMTMultiPool.h" />
     <ClInclude Include="..\src\EMTUtil\EMTPool.h" />
     <ClInclude Include="..\src\EMTUtil\EMTPipe.h" />
@@ -52,6 +54,12 @@
     <ClInclude Include="..\src\EMTUtil\stable.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\src\EMTUtil\EMTCore.c">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\src\EMTUtil\EMTLinkList.c">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="..\src\EMTUtil\EMTMultiPool.c">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
