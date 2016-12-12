@@ -7,10 +7,18 @@
 
 #include <EMTCommon.h>
 
-typedef struct _EMTPOOL EMTPOOL, *PEMTPOOL;
-struct _EMTPOOL
+typedef struct _EMTPOOLOPS EMTPOOLOPS, * PEMTPOOLOPS;
+typedef const EMTPOOLOPS * PCEMTPOOLOPS;
+typedef struct _EMTPOOL EMTPOOL, * PEMTPOOL;
+typedef struct _EMTPOOLBLOCKMETA EMTPOOLBLOCKMETA, *PEMTPOOLBLOCKMETA;
+typedef struct _EMTPOOLMETA EMTPOOLMETA, *PEMTPOOLMETA;
+
+struct _EMTPOOLOPS
 {
-	const void (*init)(PEMTPOOL pThis, const uint32_t uId, const uint32_t uBlockLen, void * pMeta, void * pPool);
+	void (*calcMetaSize)(const uint32_t uBlockCount, const uint32_t uBlockLen, uint32_t * pMetaLen, uint32_t * pMemLen);
+
+	void (*construct)(PEMTPOOL pThis, const uint32_t uId, const uint32_t uBlockCount, const uint32_t uBlockLen, void * pMeta, void * pPool);
+	void (*destruct)(PEMTPOOL pThis);
 
 	const uint32_t (*id)(PEMTPOOL pThis);
 	void * (*address)(PEMTPOOL pThis);
@@ -26,12 +34,20 @@ struct _EMTPOOL
 
 	const uint32_t (*transfer)(PEMTPOOL pThis, void * pMem, const uint32_t uToId);
 	void * (*take)(PEMTPOOL pThis, const uint32_t uToken);
-
-	uint8_t reserved[32];
 };
 
-EXTERN_C uint32_t constructEMTPool(PEMTPOOL pEMTPool, const uint32_t uBlockCount);
-EXTERN_C void destructEMTPool(PEMTPOOL pEMTPool);
+struct _EMTPOOL
+{
+	/* Private fields */
+	void * pPool;
+
+	PEMTPOOLMETA pMeta;
+	PEMTPOOLBLOCKMETA pBlockMeta;
+
+	uint32_t uId;
+};
+
+EXTERN_C PCEMTPOOLOPS emtPool(void);
 
 EXTERN_C void * rt_memset(void *mem, const int val, const uint32_t size);
 EXTERN_C uint32_t rt_cmpXchg32(volatile uint32_t *dest, uint32_t exchg, uint32_t comp);

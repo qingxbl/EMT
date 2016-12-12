@@ -9,23 +9,18 @@
 
 #define SIZEOF_EMTMULTIPOOL(configs) (sizeof(EMTMULTIPOOLCONFIG) + sizeof(EMTMULTIPOOL) * (configs))
 
-typedef struct _EMTMULTIPOOLCONFIG EMTMULTIPOOLCONFIG, *PEMTMULTIPOOLCONFIG;
-typedef struct _EMTMULTIPOOL EMTMULTIPOOL, *PEMTMULTIPOOL;
+typedef struct _EMTMULTIPOOLOPS EMTMULTIPOOLOPS, * PEMTMULTIPOOLOPS;
+typedef const EMTMULTIPOOLOPS * PCEMTMULTIPOOLOPS;
+typedef struct _EMTMULTIPOOLCONFIG EMTMULTIPOOLCONFIG, * PEMTMULTIPOOLCONFIG;
+typedef struct _EMTMULTIPOOL EMTMULTIPOOL, * PEMTMULTIPOOL;
+typedef struct _EMTMULTIPOOLMETA EMTMULTIPOOLMETA, *PEMTMULTIPOOLMETA;
 
-struct _EMTMULTIPOOLCONFIG
+struct _EMTMULTIPOOLOPS
 {
-	uint32_t uBlockLength;
-	uint32_t uBlockCount;
-	uint32_t uBlockLimit;
+	void (*calcMetaSize)(PEMTMULTIPOOL pThis, uint32_t * pMetaLen, uint32_t * pMemLen);
 
-	EMTPOOL sPool;
-
-	uint8_t reserved[4];
-};
-
-struct _EMTMULTIPOOL
-{
-	const void (*init)(PEMTMULTIPOOL pThis, void * pMeta, void * pPool);
+	void (*construct)(PEMTMULTIPOOL pThis, void * pMeta, void * pPool);
+	void (*destruct)(PEMTMULTIPOOL pThis);
 
 	const uint32_t (*id)(PEMTMULTIPOOL pThis);
 	const PEMTPOOL (*pool)(PEMTMULTIPOOL pThis, const uint32_t uPool);
@@ -39,13 +34,38 @@ struct _EMTMULTIPOOL
 
 	const uint32_t (*transfer)(PEMTMULTIPOOL pThis, void * pMem, const uint32_t uToId);
 	void * (*take)(PEMTMULTIPOOL pThis, const uint32_t uToken);
+};
 
-	uint8_t reserved[40];
+struct _EMTMULTIPOOLCONFIG
+{
+	/* Public fields - init */
+	uint32_t uBlockLength;
+	uint32_t uBlockCount;
+	uint32_t uBlockLimit;
 
+	/* Private fields */
+	uint32_t uBlockLimitLength;
+
+	EMTPOOL sPool;
+};
+
+struct _EMTMULTIPOOL
+{
+	/* Private fields */
+	uint32_t uId;
+
+	uint32_t uBlockLimitLength;
+
+	PEMTMULTIPOOLMETA pMeta;
+	uint8_t * pMemMap;
+
+	void * pMem;
+	void * pMemEnd;
+
+	/* Public fields - init */
 	uint32_t uPoolCount;
 };
 
-EXTERN_C uint32_t constructEMTMultiPool(PEMTMULTIPOOL pEMTPool, uint32_t * pMemLen);
-EXTERN_C void destructEMTMultiPool(PEMTMULTIPOOL pEMTPool);
+EXTERN_C PCEMTMULTIPOOLOPS emtMultiPool(void);
 
 #endif // __EMTMULTIPOOL_H__
