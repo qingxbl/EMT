@@ -5,7 +5,7 @@
 #ifndef __EMTPOOL_H__
 #define __EMTPOOL_H__
 
-#include <EMTCommon.h>
+#include "EMTCommon.h"
 
 typedef struct _EMTPOOLOPS EMTPOOLOPS, * PEMTPOOLOPS;
 typedef const EMTPOOLOPS * PCEMTPOOLOPS;

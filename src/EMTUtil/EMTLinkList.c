@@ -33,7 +33,27 @@ static PEMTLINKLISTNODE EMTLinkList_next(PEMTLINKLISTNODE node)
 	return ret != node ? ret : 0;
 }
 
-static PEMTLINKLISTNODE EMTLinkList_take(PEMTLINKLISTNODE head)
+static PEMTLINKLISTNODE EMTLinkList_takeFirst(PEMTLINKLISTNODE head)
+{
+	int32_t headNext, headNextNext;
+	PEMTLINKLISTNODE node = 0;
+
+	do
+	{
+		node = EMTLinkList_next(head);
+		headNext = nodeToOffset(head, node);
+		headNextNext = node->next ? headNext + node->next : 0;
+	} while (headNext && rt_cmpXchg32(&head->next, headNextNext, headNext) != headNext);
+
+	if (node != head)
+		node->next = 0;
+	else
+		node = 0;
+
+	return node;
+}
+
+static PEMTLINKLISTNODE EMTLinkList_detach(PEMTLINKLISTNODE head)
 {
 	int32_t headNext;
 	do
@@ -71,7 +91,8 @@ PCEMTLINKLISTOPS emtLinkList(void)
 		EMTLinkList_init,
 		EMTLinkList_prepend,
 		EMTLinkList_next,
-		EMTLinkList_take,
+		EMTLinkList_takeFirst,
+		EMTLinkList_detach,
 		EMTLinkList_reverse,
 	};
 
