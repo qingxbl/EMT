@@ -11,24 +11,26 @@ class EMTShareMemory : public IEMTShareMemory
 	IMPL_IEMTUNKNOWN;
 
 public:
-	explicit EMTShareMemory();
+	explicit EMTShareMemory(const wchar_t * name);
 	virtual ~EMTShareMemory();
 
 protected: // IEMTShareMemory
 	virtual uint32_t length();
 	virtual void * address();
 
-	virtual void * open(const wchar_t * name, const uint32_t length);
+	virtual void * open(const uint32_t length);
 	virtual void close();
 
 private:
+	wchar_t * mName;
 	uint32_t mLength;
 	void * mAddress;
 	HANDLE mShareMemory;
 };
 
-EMTShareMemory::EMTShareMemory()
-	: mLength(0)
+EMTShareMemory::EMTShareMemory(const wchar_t * name)
+	: mName(_wcsdup(name))
+	, mLength(0)
 	, mAddress(NULL)
 	, mShareMemory(NULL)
 {
@@ -38,6 +40,8 @@ EMTShareMemory::EMTShareMemory()
 EMTShareMemory::~EMTShareMemory()
 {
 	close();
+
+	free(mName);
 }
 
 uint32_t EMTShareMemory::length()
@@ -50,7 +54,7 @@ void * EMTShareMemory::address()
 	return mAddress;
 }
 
-void * EMTShareMemory::open(const wchar_t * name, const uint32_t length)
+void * EMTShareMemory::open(const uint32_t length)
 {
 	do
 	{
@@ -62,7 +66,7 @@ void * EMTShareMemory::open(const wchar_t * name, const uint32_t length)
 			PAGE_READWRITE,
 			0,
 			length,
-			name);
+			mName);
 
 		if (mShareMemory == NULL)
 			break;
@@ -89,7 +93,7 @@ void EMTShareMemory::close()
 
 END_NAMESPACE_ANONYMOUS
 
-IEMTShareMemory * createEMTShareMemory()
+IEMTShareMemory * createEMTShareMemory(const wchar_t * name)
 {
-	return new EMTShareMemory;
+	return new EMTShareMemory(name);
 }

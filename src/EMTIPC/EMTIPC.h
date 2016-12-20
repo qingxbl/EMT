@@ -5,33 +5,59 @@
 #ifndef __EMTIPC_H__
 #define __EMTIPC_H__
 
+#include <stdint.h>
+#include <memory>
+
 #include <EMTCommon.h>
 
-struct IEMTThread;
-
-struct DECLSPEC_NOVTABLE IEMTIPCHandler : public IEMTUnknown
+struct DECLSPEC_NOVTABLE IEMTIPCSink : public IEMTUnknown
 {
 	virtual void connected() = 0;
 	virtual void disconnected() = 0;
 
-	virtual void received(void * buf) = 0;
-	virtual void sent(void * buf) = 0;
+	virtual void received(void * pMem) = 0;
+	virtual void called(void * pMem, const uint32_t uContext) = 0;
+	virtual void resulted(void * pMem, const uint32_t uContext) = 0;
 };
 
-struct DECLSPEC_NOVTABLE IEMTIPC : public IEMTUnknown
+struct IEMTThread;
+struct IEMTShareMemory;
+class EMTIPCPrivate;
+class EMTIPC
 {
-	virtual bool isConnected() = 0;
+public:
+	enum
+	{
+		kInvalidConn = ~0U,
+	};
 
-	virtual bool listen(const wchar_t *name) = 0;
-	virtual bool connect(const wchar_t *name) = 0;
-	virtual void disconnect() = 0;
+public:
+	IEMTThread * thread() const;
+	IEMTShareMemory * shareMemory() const;
+	IEMTIPCSink * sink() const;
 
-	virtual void * alloc(const uint32_t len) = 0;
-	virtual void free(void * buf) = 0;
+	uint32_t connId();
+	bool isConnected();
 
-	virtual void send(void * buf) = 0;
+	uint32_t connect(uint32_t uConnId);
+	uint32_t disconnect();
+	void * alloc(const uint32_t uLen);
+	void free(void * pMem);
+
+	void send(void * pMem);
+	void call(void * pMem, const uint32_t uContext);
+	void result(void * pMem, const uint32_t uContext);
+
+protected:
+	explicit EMTIPC(EMTIPCPrivate & dd, IEMTThread * pThread, IEMTShareMemory * pShareMemory, IEMTIPCSink * pSink);
+	virtual ~EMTIPC();
+
+private:
+	EMTIPC(const EMTIPC &);
+
+protected:
+	friend class EMTIPCPrivate;
+	std::unique_ptr<EMTIPCPrivate> d_ptr;
 };
-
-IEMTIPC * createEMTIPC(IEMTThread * thread, IEMTIPCHandler * handler);
 
 #endif // __EMTIPC_H__

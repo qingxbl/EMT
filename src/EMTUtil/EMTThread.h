@@ -35,22 +35,31 @@ struct DECLSPEC_NOVTABLE IEMTThread : public IEMTUnknown
 IEMTThread * createEMTThread(void);
 
 template <class T>
-struct EMTRunnable : public IEMTRunnable, public T
+struct EMTWaitable : public IEMTWaitable, public T
 {
 	IMPL_IEMTUNKNOWN;
 
-	explicit EMTRunnable(T func, bool autoDestroy) : T(func), autoDestroy(autoDestroy) { }
+	explicit EMTWaitable(T func, bool autoDestroy) : T(func), autoDestroy(autoDestroy) { }
+	explicit EMTWaitable(T func, void * handle, bool autoDestroy) : T(func), handle(handle), autoDestroy(autoDestroy) { }
 
 	virtual void run() { (*this)(); }
 	virtual bool isAutoDestroy() { return autoDestroy; }
+	virtual void * waitHandle() { return handle; }
 
+	void * handle;
 	bool autoDestroy;
 };
 
 template <class T>
-EMTRunnable<T> * createEMTRunnable(T && func, bool autoDestroy = true)
+EMTWaitable<T> * createEMTRunnable(T && func, bool autoDestroy = true)
 {
-	return new EMTRunnable<T>(std::forward<T>(func), autoDestroy);
+	return new EMTWaitable<T>(std::forward<T>(func), autoDestroy);
+}
+
+template <class T>
+EMTWaitable<T> * createEMTWaitable(T && func, void * handle, bool autoDestroy = false)
+{
+	return new EMTWaitable<T>(std::forward<T>(func), handle, autoDestroy);
 }
 
 #endif // __EMTTHREAD_H__

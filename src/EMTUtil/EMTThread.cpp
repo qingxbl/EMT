@@ -29,7 +29,6 @@ protected: // IEMTThread
 	virtual void delay(IEMTRunnable *runnable, const uint64_t time, const bool repeat);
 
 private:
-	DWORD run();
 	void rebuildRegisteredHandles();
 
 private:

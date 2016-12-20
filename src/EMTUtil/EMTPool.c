@@ -30,7 +30,7 @@ enum
 };
 
 static void EMTPool_calcMetaSize(const uint32_t uBlockCount, const uint32_t uBlockLen, uint32_t * pMetaLen, uint32_t * pMemLen);
-static void EMTPool_construct(PEMTPOOL pThis, const uint32_t uId, const uint32_t uBlockCount, const uint32_t uBlockLen, void * pMeta, void * pPool);
+static void EMTPool_construct(PEMTPOOL pThis, const uint32_t uId, const uint32_t uBlockCount, const uint32_t uBlockLen, const uint32_t uBlockInit, void * pMeta, void * pPool);
 static void EMTPool_destruct(PEMTPOOL pThis);
 static const uint32_t EMTPool_id(PEMTPOOL pThis);
 static void * EMTPool_address(PEMTPOOL pThis);
@@ -69,10 +69,10 @@ static void EMTPool_calcMetaSize(const uint32_t uBlockCount, const uint32_t uBlo
 	*pMemLen = uBlockLen * uBlockCount;
 }
 
-static void EMTPool_construct(PEMTPOOL pThis, const uint32_t uId, const uint32_t uBlockCount, const uint32_t uBlockLen, void * pMeta, void * pPool)
+static void EMTPool_construct(PEMTPOOL pThis, const uint32_t uId, const uint32_t uBlockCount, const uint32_t uBlockLen, const uint32_t uBlockInit, void * pMeta, void * pPool)
 {
 	volatile uint32_t * pInitStatus;
-	uint32_t uMagicNum;
+	uint32_t i;
 
 	pThis->pMeta = (PEMTPOOLMETA)pMeta;
 	pThis->pBlockMeta = (PEMTPOOLBLOCKMETA)(pThis->pMeta + 1);
@@ -81,17 +81,18 @@ static void EMTPool_construct(PEMTPOOL pThis, const uint32_t uId, const uint32_t
 
 	pInitStatus = &pThis->pMeta->uBlockLen;
 
-	uMagicNum = rt_cmpXchg32(pInitStatus, kEMTPoolMagicNumInit, kEMTPoolMagicNumUninit);
-	while (uMagicNum != kEMTPoolMagicNumUninit && *pInitStatus == kEMTPoolMagicNumInit);
+	i = rt_cmpXchg32(pInitStatus, kEMTPoolMagicNumInit, kEMTPoolMagicNumUninit);
+	while (i != kEMTPoolMagicNumUninit && *pInitStatus == kEMTPoolMagicNumInit);
 
-	if (uMagicNum != kEMTPoolMagicNumUninit)
+	if (i != kEMTPoolMagicNumUninit)
 		return;
 
 	pThis->pMeta->uNextBlock = 0;
 	pThis->pMeta->uBlockLen = uBlockLen;
 	pThis->pMeta->uBlockCount = uBlockCount;
 	rt_memset(pThis->pBlockMeta, 0, pThis->pMeta->uBlockCount * sizeof(*pThis->pBlockMeta));
-	pThis->pBlockMeta->uLen = pThis->pMeta->uBlockCount;
+	for (i = 0; i < uBlockCount; i += uBlockInit)
+		pThis->pBlockMeta[i].uLen = uBlockInit;
 }
 
 static void EMTPool_destruct(PEMTPOOL pThis)

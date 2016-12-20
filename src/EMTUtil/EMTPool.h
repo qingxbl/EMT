@@ -17,7 +17,7 @@ struct _EMTPOOLOPS
 {
 	void (*calcMetaSize)(const uint32_t uBlockCount, const uint32_t uBlockLen, uint32_t * pMetaLen, uint32_t * pMemLen);
 
-	void (*construct)(PEMTPOOL pThis, const uint32_t uId, const uint32_t uBlockCount, const uint32_t uBlockLen, void * pMeta, void * pPool);
+	void (*construct)(PEMTPOOL pThis, const uint32_t uId, const uint32_t uBlockCount, const uint32_t uBlockLen, const uint32_t uBlockInit, void * pMeta, void * pPool);
 	void (*destruct)(PEMTPOOL pThis);
 
 	const uint32_t (*id)(PEMTPOOL pThis);

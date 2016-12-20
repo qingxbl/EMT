@@ -53,4 +53,13 @@ struct IEMTUnknown_Delete
 #endif // __cplusplus
 #endif // !END_NAMESPACE_ANONYMOUS
 
+#ifndef EMT_PRIVATE
+#ifdef __cplusplus
+#define EMT_PRIVATE(TYPE, FIELD, NAME) TYPE##Private * NAME = (TYPE##Private *)&*this->FIELD
+#else // !__cplusplus
+#define EMT_PRIVATE(TYPE, FIELD, NAME)
+#endif // __cplusplus
+#define EMT_D(TYPE) EMT_PRIVATE(TYPE, d_ptr, d)
+#endif // EMT_PRIVATE
+
 #endif // __EMTCOMMON_H__

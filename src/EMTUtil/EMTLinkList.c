@@ -23,7 +23,7 @@ static void EMTLinkList_prepend(PEMTLINKLISTNODE head, PEMTLINKLISTNODE node)
 	do
 	{
 		headNext = head->next;
-		node->next = headNext - offset;
+		node->next = headNext ? headNext - offset: 0;
 	} while (rt_cmpXchg32(&head->next, offset, headNext) != headNext);
 }
 

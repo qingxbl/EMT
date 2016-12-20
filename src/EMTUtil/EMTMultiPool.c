@@ -53,7 +53,7 @@ static void EMTMultiPool_calcMetaSize(PEMTMULTIPOOL pThis, uint32_t * pMetaLen, 
 	{
 		uint32_t poolMetaLen, poolMemLen;
 		emtPool()->calcMetaSize(poolConfig->uBlockCount, poolConfig->uBlockLength, &poolMetaLen, &poolMemLen);
-		*pMetaLen += poolMetaLen;
+		*pMetaLen += poolMetaLen + (poolConfig->uBlockLength * poolConfig->uBlockCount >> kEMTMultiPoolPageShift);
 		*pMemLen += poolMemLen;
 	}
 }
@@ -62,11 +62,9 @@ static void EMTMultiPool_construct(PEMTMULTIPOOL pThis, void * pMeta, void * pPo
 {
 	uint8_t * meta = (uint8_t *)pMeta;
 	uint8_t * mem = (uint8_t *)pPool;
-	uint8_t * memMap = meta + pThis->uId;
-	PEMTMULTIPOOLCONFIG poolConfig = EMTMultiPool_poolConfig(pThis, 0);
-	PEMTMULTIPOOLCONFIG poolConfigEnd = poolConfig + pThis->uPoolCount;
+	PEMTMULTIPOOLCONFIG poolConfig;
+	uint32_t i;
 
-	pThis->pMemMap = memMap;
 	pThis->pMeta = (PEMTMULTIPOOLMETA)meta;
 	meta += sizeof(*pThis->pMeta);
 
@@ -75,23 +73,32 @@ static void EMTMultiPool_construct(PEMTMULTIPOOL pThis, void * pMeta, void * pPo
 		pThis->uId = pThis->pMeta->uNextId;
 	} while (rt_cmpXchg32(&pThis->pMeta->uNextId, pThis->uId + 1, pThis->uId) != pThis->uId || pThis->uId == 0);
 
-	for (; poolConfig < poolConfigEnd; ++poolConfig)
+	for (i = 0; i < pThis->uPoolCount; ++i)
 	{
-		const uint32_t memMapCount = poolConfig->uBlockLength * poolConfig->uBlockCount >> kEMTMultiPoolPageShift;
+		poolConfig = EMTMultiPool_poolConfig(pThis, i);
 		uint32_t poolMetaLen, poolMemLen;
 		emtPool()->calcMetaSize(poolConfig->uBlockCount, poolConfig->uBlockLength, &poolMetaLen, &poolMemLen);
 
-		rt_memset(memMap, pThis->uPoolCount - (poolConfigEnd - poolConfig), memMapCount);
-		emtPool()->construct(&poolConfig->sPool, pThis->uId, poolConfig->uBlockCount, poolConfig->uBlockLength, meta, mem);
+		emtPool()->construct(&poolConfig->sPool, pThis->uId, poolConfig->uBlockCount, poolConfig->uBlockLength, poolConfig->uBlockLimit, meta, mem);
 		meta += poolMetaLen;
 		mem += poolMemLen;
-		memMap += memMapCount;
 		poolConfig->uBlockLimitLength = poolConfig->uBlockLength * poolConfig->uBlockLimit;
 	}
 
+	pThis->pMemMap = meta;
+	for (i = 0; i < pThis->uPoolCount; ++i)
+	{
+		poolConfig = EMTMultiPool_poolConfig(pThis, i);
+		const uint32_t memMapCount = poolConfig->uBlockLength * poolConfig->uBlockCount >> kEMTMultiPoolPageShift;
+
+		rt_memset(meta, i, memMapCount);
+		meta += memMapCount;
+	}
+
+	poolConfig = EMTMultiPool_poolConfig(pThis, pThis->uPoolCount - 1);
 	pThis->pMem = pPool;
 	pThis->pMemEnd = mem;
-	pThis->uBlockLimitLength = (poolConfigEnd - 1)->uBlockLength * (poolConfigEnd - 1)->uBlockCount;
+	pThis->uBlockLimitLength = poolConfig->uBlockLength * poolConfig->uBlockCount;
 }
 
 static void EMTMultiPool_destruct(PEMTMULTIPOOL pThis)

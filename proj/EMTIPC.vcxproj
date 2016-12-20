@@ -43,9 +43,12 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="..\src\EMTIPC\EMTIPC.h" />
+    <ClInclude Include="..\src\EMTIPC\EMTIPCPrivate.h" />
+    <ClInclude Include="..\src\EMTIPC\EMTIPCWin.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\EMTIPC\EMTIPC.cpp" />
+    <ClCompile Include="..\src\EMTIPC\EMTIPCWin.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="EMTUtil.vcxproj">

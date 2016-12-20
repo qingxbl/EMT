@@ -44,6 +44,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="..\src\EMTUtil\EMTCore.h" />
+    <ClInclude Include="..\src\EMTUtil\EMTExtend.h" />
     <ClInclude Include="..\src\EMTUtil\EMTLinkList.h" />
     <ClInclude Include="..\src\EMTUtil\EMTMultiPool.h" />
     <ClInclude Include="..\src\EMTUtil\EMTPool.h" />

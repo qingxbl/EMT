@@ -1,465 +1,198 @@
 #include "EMTIPC.h"
 
-#include <EMTUtil/EMTPipe.h>
+#include "EMTIPCPrivate.h"
+
+#include <EMTUtil/EMTExtend.h>
 #include <EMTUtil/EMTThread.h>
 #include <EMTUtil/EMTShareMemory.h>
-#include <EMTUtil/EMTMultiPool.h>
 
-#include <Windows.h>
-
-#include <memory>
-#include <algorithm>
-
-BEGIN_NAMESPACE_ANONYMOUS
-
-enum
+EMTIPCPrivate::EMTIPCPrivate()
 {
-	kBufferSize = kEMTPipeBufferSize,
+}
 
-	kPageShift = 12,
-	kPageSize = 1 << kPageShift,
-	kPageMask = kPageSize - 1,
-
-	kBlockLengthMax = 64 * 1024,
-	kBlockCountMax = 4,
-	kBlockLinearMax = kBlockLengthMax * kBlockCountMax,
-};
-
-enum
+EMTIPCPrivate::~EMTIPCPrivate()
 {
-	kEMTPipeProtoBase = 0,
-	kEMTPipeProtoHandshake,
-	kEMTPipeProtoTransfer,
-	kEMTPipeProtoPartialTransfer,
-};
+	emtCore()->destruct(&mCore);
 
-struct EMTPipeProtoBase
+	mShareMemory->destruct();
+}
+
+void EMTIPCPrivate::init(IEMTThread * pThread, IEMTShareMemory * pShareMemory, IEMTIPCSink * pSink)
 {
-	EMTPipeProtoBase(const uint16_t uri, const uint16_t len) : uri(uri), len(len) { }
+	mThread = pThread;
+	mShareMemory = pShareMemory;
+	mSink = pSink;
 
-	uint16_t uri;
-	uint16_t len;
-};
+	emtCore()->construct(&mCore, emtCoreSink(), this);
+}
 
-template <uint16_t URI, class T>
-struct EMTPipeProto : EMTPipeProtoBase
+void EMTIPCPrivate::notified()
 {
-	typedef T FinalT;
-	enum { kUri = URI };
+	emtCore()->notified(&mCore);
+}
 
-	EMTPipeProto() : EMTPipeProtoBase(kUri, sizeof(FinalT)) { }
-};
-
-struct EMTPipeProtoHandshake : public EMTPipeProto<kEMTPipeProtoHandshake, EMTPipeProtoHandshake>
+void EMTIPCPrivate::connected(EMTIPCPrivate * pThis, const uint64_t uParam0, const uint64_t uParam1)
 {
-	EMTPipeProtoHandshake(const uint32_t poolId) : poolId(poolId) { }
+	pThis->sys_connected(uParam0, uParam1);
 
-	uint32_t poolId;
-};
+	pThis->mSink->connected();
+}
 
-struct EMTPipeProtoTransfer : public EMTPipeProto<kEMTPipeProtoTransfer, EMTPipeProtoTransfer>
+void EMTIPCPrivate::disconnected(EMTIPCPrivate * pThis)
 {
+	pThis->sys_disconnected();
 
-};
+	pThis->mSink->disconnected();
+}
 
-struct EMTPipeProtoPartialTransfer : public EMTPipeProto<kEMTPipeProtoPartialTransfer, EMTPipeProtoPartialTransfer>
+void EMTIPCPrivate::received(EMTIPCPrivate * pThis, void * pMem, const uint64_t uParam0, const uint64_t uParam1)
 {
-	EMTPipeProtoPartialTransfer(const uint32_t total, void * senderBuf)
-		: start(0), end(0), total(total), senderHandle((uintptr_t)senderBuf), receiverHandle(0)
-	{ }
-	uint32_t start;
-	uint32_t end;
-	uint32_t total;
+	uint32_t context;
+	switch (EMTExtend_received(&pThis->mCore, pMem, uParam0, uParam1, &context))
+	{
+	case kEMTExtendSend:
+		pThis->mSink->received(pMem);
+		break;
+	case kEMTExtendCall:
+		pThis->mSink->called(pMem, context);
+		break;
+	case kEMTExtendResult:
+		pThis->mSink->resulted(pMem, context);
+		break;
+	default:
+		break;
+	}
+}
 
-	uint64_t senderHandle;
-	uint64_t receiverHandle;
-};
-
-struct EMTIPCTrasferData
+void * EMTIPCPrivate::getShareMemory(EMTIPCPrivate * pThis, uint32_t uLen)
 {
-	uint32_t token;
-};
+	return pThis->mShareMemory->open(uLen);
+}
 
-struct EMTIPCMemoryBlock
+void EMTIPCPrivate::releaseShareMemory(EMTIPCPrivate * pThis, void * pMem)
 {
-	uint32_t length;
-};
+	pThis->mShareMemory->close();
+}
 
-struct EMTMULTIPOOL_Delete
+void EMTIPCPrivate::notify(EMTIPCPrivate * pThis)
 {
-	void operator()(EMTMULTIPOOL * p) const { emtMultiPool()->destruct(p); }
-};
+	pThis->sys_notify();
+}
 
-class EMTIPC : public IEMTIPC, public IEMTPipeHandler
+void EMTIPCPrivate::queue(EMTIPCPrivate * pThis, void * pMem)
 {
-	IMPL_IEMTUNKNOWN;
+	pThis->mThread->queue(createEMTRunnable(std::bind(emtCore()->queued, &pThis->mCore, pMem)));
+}
 
-public:
-	explicit EMTIPC(IEMTThread * thread, IEMTIPCHandler * ipcHandler);
-	virtual ~EMTIPC();
-
-protected: // IEMTIPC
-	virtual bool isConnected();
-
-	virtual bool listen(const wchar_t *name);
-	virtual bool connect(const wchar_t *name);
-	virtual void disconnect();
-
-	virtual void * alloc(const uint32_t len);
-	virtual void free(void * buf);
-
-	virtual void send(void * buf);
-
-protected: // IEMTPipeHandler
-	virtual void connected();
-	virtual void disconnected();
-
-	virtual void received(void * buf, const uint32_t len);
-	virtual void sent(void * buf, const uint32_t len);
-
-private:
-	bool open(const wchar_t * name, const bool isServer);
-
-private:
-	void received(EMTPipeProtoHandshake & p);
-	void received(EMTPipeProtoTransfer & p);
-	void received(EMTPipeProtoPartialTransfer & p);
-
-	void sent(EMTPipeProtoHandshake & p);
-	void sent(EMTPipeProtoTransfer & p);
-	void sent(EMTPipeProtoPartialTransfer & p);
-
-	void sendPack(EMTPipeProtoBase * pack);
-
-	void createPool(const wchar_t * name);
-	void deletePool();
-
-	void sendPartial(EMTPipeProtoPartialTransfer * p);
-	void receivePartial(const EMTPipeProtoPartialTransfer & p);
-
-private:
-	IEMTThread * mThread;
-	IEMTIPCHandler * mIPCHandler;
-	std::unique_ptr<IEMTPipe, IEMTUnknown_Delete> mPipe;
-	std::unique_ptr<IEMTShareMemory, IEMTUnknown_Delete> mShareMemory;
-	std::unique_ptr<EMTMULTIPOOL, EMTMULTIPOOL_Delete> mPool;
-
-	bool mConnected;
-	uint32_t mRemoteId;
-};
-
-EMTIPC::EMTIPC(IEMTThread * thread, IEMTIPCHandler * ipcHandler)
-	: mThread(thread)
-	, mIPCHandler(ipcHandler)
-	, mPipe(createEMTPipe(thread, this))
-	, mConnected(false)
+void * EMTIPCPrivate::allocSys(EMTIPCPrivate * pThis, const uint32_t uLen)
 {
+	return ::malloc(uLen);
+}
 
+void EMTIPCPrivate::freeSys(EMTIPCPrivate * pThis, void * pMem)
+{
+	::free(pMem);
+}
+
+PEMTCORESINKOPS EMTIPCPrivate::emtCoreSink()
+{
+	static EMTCORESINKOPS sOps =
+	{
+		(void (*)(void * pThis, const uint64_t uParam0, const uint64_t uParam1))connected,
+		(void (*)(void * pThis))disconnected,
+		(void (*)(void * pThis, void * pMem, const uint64_t uParam0, const uint64_t uParam1))received,
+		(void * (*)(void * pThis, const uint32_t uLen))getShareMemory,
+		(void (*)(void * pThis, void * pMem))releaseShareMemory,
+		(void (*)(void * pThis))notify,
+		(void (*)(void * pThis, void * pMem))queue,
+		(void * (*)(void * pThis, const uint32_t uLen))allocSys,
+		(void (*)(void * pThis, void * pMem))freeSys,
+	};
+
+	return &sOps;
+}
+
+EMTIPC::EMTIPC(EMTIPCPrivate & dd, IEMTThread * pThread, IEMTShareMemory * pShareMemory, IEMTIPCSink * pSink)
+	: d_ptr(&dd)
+{
+	EMT_D(EMTIPC);
+
+	d->q_ptr = this;
+	d->init(pThread, pShareMemory, pSink);
 }
 
 EMTIPC::~EMTIPC()
 {
-	deletePool();
+}
+
+IEMTThread * EMTIPC::thread() const
+{
+	EMT_D(EMTIPC);
+	return d->mThread;
+}
+
+IEMTShareMemory * EMTIPC::shareMemory() const
+{
+	EMT_D(EMTIPC);
+	return d->mShareMemory;
+}
+
+IEMTIPCSink * EMTIPC::sink() const
+{
+	EMT_D(EMTIPC);
+	return d->mSink;
+}
+
+uint32_t EMTIPC::connId()
+{
+	EMT_D(EMTIPC);
+	return emtCore()->connId(&d->mCore);
 }
 
 bool EMTIPC::isConnected()
 {
-	return mConnected;
+	EMT_D(EMTIPC);
+	return emtCore()->isConnected(&d->mCore) != 0;
 }
 
-bool EMTIPC::listen(const wchar_t * name)
+uint32_t EMTIPC::connect(uint32_t uConnId)
 {
-	return open(name, true);
+	EMT_D(EMTIPC);
+	return d->sys_connect(uConnId);
 }
 
-bool EMTIPC::connect(const wchar_t * name)
+uint32_t EMTIPC::disconnect()
 {
-	return open(name, false);
+	EMT_D(EMTIPC);
+	return emtCore()->disconnect(&d->mCore);
 }
 
-void EMTIPC::disconnect()
+void * EMTIPC::alloc(const uint32_t uLen)
 {
-	if (!mThread->isCurrentThread())
-		return mThread->queue(createEMTRunnable(std::bind(&EMTIPC::disconnect, this)));
-
-	if (!mConnected)
-		deletePool();
-
-	mPipe->disconnect();
+	EMT_D(EMTIPC);
+	return emtCore()->alloc(&d->mCore, uLen);
 }
 
-void * EMTIPC::alloc(const uint32_t len)
+void EMTIPC::free(void * pMem)
 {
-	void * ret = emtMultiPool()->alloc(mPool.get(), len);
-
-	if (ret == nullptr)
-	{
-		EMTIPCMemoryBlock * memoryBlock = (EMTIPCMemoryBlock *)malloc(sizeof(EMTIPCMemoryBlock) + len);
-		memoryBlock->length = len;
-		ret = memoryBlock + 1;
-	}
-
-	return ret;
+	EMT_D(EMTIPC);
+	return emtCore()->free(&d->mCore, pMem);
 }
 
-void EMTIPC::free(void * buf)
+void EMTIPC::send(void * pMem)
 {
-	EMTPOOL * pool = emtMultiPool()->poolByMem(mPool.get(), buf);
-	if (pool)
-	{
-		emtPool()->free(pool, buf);
-	}
-	else
-	{
-		::free((EMTIPCMemoryBlock *)buf - 1);
-	}
+	EMT_D(EMTIPC);
+	EMTExtend_send(&d->mCore, pMem);
 }
 
-void EMTIPC::send(void * buf)
+void EMTIPC::call(void * pMem, const uint32_t uContext)
 {
-	if (!mThread->isCurrentThread())
-		return mThread->queue(createEMTRunnable(std::bind(&EMTIPC::send, this, buf)));
-
-	if (!emtMultiPool()->poolByMem(mPool.get(), buf))
-	{
-		const uint32_t bufLen = (((EMTIPCMemoryBlock *)buf) - 1)->length;
-		return sendPartial(new (malloc(kBufferSize)) EMTPipeProtoPartialTransfer(bufLen, buf));
-	}
-
-	const uint32_t len = sizeof(EMTPipeProtoTransfer) + sizeof(EMTIPCTrasferData);
-	EMTPipeProtoTransfer * p = new (malloc(len)) EMTPipeProtoTransfer;
-	p->len = len;
-
-	EMTIPCTrasferData * t = (EMTIPCTrasferData *)(p + 1);
-	t->token = emtMultiPool()->transfer(mPool.get(), buf, mRemoteId);
-
-	sendPack(p);
+	EMT_D(EMTIPC);
+	EMTExtend_call(&d->mCore, pMem, uContext);
 }
 
-void EMTIPC::connected()
+void EMTIPC::result(void * pMem, const uint32_t uContext)
 {
-	sendPack(new EMTPipeProtoHandshake(emtMultiPool()->id(mPool.get())));
-}
-
-void EMTIPC::disconnected()
-{
-	deletePool();
-	mConnected = false;
-
-	mIPCHandler->disconnected();
-}
-
-void EMTIPC::received(void * buf, const uint32_t len)
-{
-	EMTPipeProtoBase * p = (EMTPipeProtoBase *)buf;
-	switch (p->uri)
-	{
-	case EMTPipeProtoHandshake::kUri:
-		received(*(EMTPipeProtoHandshake *)p);
-		break;
-	case EMTPipeProtoTransfer::kUri:
-		received(*(EMTPipeProtoTransfer *)p);
-		break;
-	case EMTPipeProtoPartialTransfer::kUri:
-		received(*(EMTPipeProtoPartialTransfer *)p);
-		break;
-	default:
-		break;
-	}
-}
-
-void EMTIPC::sent(void * buf, const uint32_t len)
-{
-	EMTPipeProtoBase * p = (EMTPipeProtoBase *)buf;
-	switch (p->uri)
-	{
-	case EMTPipeProtoHandshake::kUri:
-		sent(*(EMTPipeProtoHandshake *)p);
-		break;
-	case EMTPipeProtoTransfer::kUri:
-		sent(*(EMTPipeProtoTransfer *)p);
-		break;
-	case EMTPipeProtoPartialTransfer::kUri:
-		sent(*(EMTPipeProtoPartialTransfer *)p);
-		break;
-	default:
-		break;
-	}
-
-	delete p;
-}
-
-bool EMTIPC::open(const wchar_t * name, const bool isServer)
-{
-	wchar_t fullname[MAX_PATH];
-
-	wcscpy_s(fullname, L"\\\\.\\pipe\\");
-	wcscat_s(fullname, name);
-
-	const bool pipeResult = isServer ? mPipe->listen(fullname) : mPipe->connect(fullname);
-	if (!pipeResult)
-		return false;
-
-	wcscpy_s(fullname, L"Local\\");
-	wcscat_s(fullname, name);
-
-	createPool(fullname);
-
-	return true;
-}
-
-void EMTIPC::received(EMTPipeProtoHandshake & p)
-{
-	mConnected = true;
-	mRemoteId = p.poolId;
-	mIPCHandler->connected();
-}
-
-void EMTIPC::received(EMTPipeProtoTransfer & p)
-{
-	const uint32_t count = (p.len - sizeof(p)) / sizeof(EMTIPCTrasferData);
-	EMTIPCTrasferData * t = (EMTIPCTrasferData *)(&p + 1);
-
-	mIPCHandler->received(emtMultiPool()->take(mPool.get(), t->token));
-}
-
-void EMTIPC::received(EMTPipeProtoPartialTransfer & p)
-{
-	if (p.start != p.end)
-		receivePartial(p);
-	else
-		sendPartial(new (malloc(kBufferSize)) EMTPipeProtoPartialTransfer(p));
-}
-
-void EMTIPC::sent(EMTPipeProtoHandshake & p)
-{
-}
-
-void EMTIPC::sent(EMTPipeProtoTransfer & p)
-{
-	const uint32_t count = (p.len - sizeof(p)) / sizeof(EMTIPCTrasferData);
-	EMTIPCTrasferData * t = (EMTIPCTrasferData *)(&p + 1);
-
-	mIPCHandler->sent(emtMultiPool()->take(mPool.get(), t->token));
-}
-
-void EMTIPC::sent(EMTPipeProtoPartialTransfer & p)
-{
-	if (p.end == p.total)
-		mIPCHandler->sent((void *)p.senderHandle);
-}
-
-void EMTIPC::sendPack(EMTPipeProtoBase * pack)
-{
-	mPipe->send(pack, pack->len);
-}
-
-void EMTIPC::createPool(const wchar_t * fullname)
-{
-	if (mShareMemory)
-		return;
-
-	mShareMemory.reset(createEMTShareMemory());
-
-	EMTMULTIPOOLCONFIG multiPoolConfig[] =
-	{
-		{ 512, 8 * 128, 4 },
-		{ kBlockLengthMax, 16 * 8, kBlockCountMax },
-	};
-	EMTMULTIPOOL * multiPool = (EMTMULTIPOOL *)malloc(sizeof(EMTMULTIPOOL) + sizeof(multiPoolConfig));
-	multiPool->uPoolCount = _ARRAYSIZE(multiPoolConfig);
-	memcpy(multiPool + 1, multiPoolConfig, sizeof(multiPoolConfig));
-	uint32_t metaLen, memLen;
-	emtMultiPool()->calcMetaSize(multiPool, &metaLen, &memLen);
-	metaLen = (metaLen + kPageMask) & kPageMask;
-
-	void * shareMemory = mShareMemory->open(fullname, metaLen + memLen);
-
-	emtMultiPool()->construct(multiPool, shareMemory, (uint8_t *)shareMemory + metaLen);
-
-	mPool.reset(multiPool);
-}
-
-void EMTIPC::deletePool()
-{
-	if (!mShareMemory)
-		return;
-
-	mPool.reset();
-	mShareMemory.reset();
-}
-
-void EMTIPC::sendPartial(EMTPipeProtoPartialTransfer * p)
-{
-	EMTIPCTrasferData * t = (EMTIPCTrasferData *)(p + 1);
-	EMTIPCTrasferData * tend = (EMTIPCTrasferData *)((uint8_t *)p + kBufferSize);
-
-	for (; t < tend && p->end < p->total; ++t)
-	{
-		const uint32_t blockLen = min(p->total - p->end, kBlockLinearMax);
-		void * buf = emtMultiPool()->alloc(mPool.get(), blockLen);
-		if (!buf)
-			break;
-
-		memcpy(buf, (uint8_t *)p->senderHandle + p->end, blockLen);
-		p->end += blockLen;
-		p->len += sizeof(*t);
-		t->token = emtMultiPool()->transfer(mPool.get(), buf, mRemoteId);
-	}
-
-	if (p->len != sizeof(*p))
-	{
-		sendPack(p);
-	}
-	else
-	{
-		mThread->queue(createEMTRunnable(std::bind(&EMTIPC::sendPartial, this, p)));
-	}
-}
-
-void EMTIPC::receivePartial(const EMTPipeProtoPartialTransfer & p)
-{
-	void * mem;
-
-	if (p.start != 0 || p.len != sizeof(p) + sizeof(EMTIPCTrasferData) || p.end != p.total)
-	{
-		uint32_t start = p.start;
-		mem = (p.receiverHandle ? (void *)p.receiverHandle : (uint8_t *)this->alloc(p.total));
-
-		std::for_each((EMTIPCTrasferData *)(&p + 1), (EMTIPCTrasferData *)(&p + 1) + ((p.len - sizeof(p)) / sizeof(EMTIPCTrasferData)), [&](const EMTIPCTrasferData & t)
-		{
-			void * buf = emtMultiPool()->take(mPool.get(), t.token);
-			const uint32_t len = emtMultiPool()->length(mPool.get(), buf);
-
-			memcpy((uint8_t *)mem + start, buf, len);
-			start += len;
-
-			emtMultiPool()->free(mPool.get(), buf);
-		});
-	}
-	else
-	{
-		EMTIPCTrasferData * t = (EMTIPCTrasferData *)(&p + 1);
-		mem = emtMultiPool()->take(mPool.get(), t->token);
-	}
-
-	if (p.end == p.total)
-	{
-		mIPCHandler->received(mem);
-	}
-	else
-	{
-		EMTPipeProtoPartialTransfer * np = new EMTPipeProtoPartialTransfer(p);
-		np->len = sizeof(EMTPipeProtoPartialTransfer);
-		np->start = p.end;
-		np->receiverHandle = (uintptr_t)mem;
-		sendPack(np);
-	}
-}
-
-END_NAMESPACE_ANONYMOUS
-
-IEMTIPC * createEMTIPC(IEMTThread * thread, IEMTIPCHandler * ipcHandler)
-{
-	return new EMTIPC(thread, ipcHandler);
+	EMT_D(EMTIPC);
+	EMTExtend_result(&d->mCore, pMem, uContext);
 }

@@ -23,10 +23,11 @@ typedef struct _EMTCOREBLOCKMETA EMTCOREBLOCKMETA, * PEMTCOREBLOCKMETA;
 
 struct _EMTCOREOPS
 {
-	uint32_t (*construct)(PEMTCORE pThis, PEMTCORESINKOPS pSink, void * pSinkCtx);
+	void (*construct)(PEMTCORE pThis, PEMTCORESINKOPS pSink, void * pSinkCtx);
 	void (*destruct)(PEMTCORE pThis);
 
 	uint32_t (*connId)(PEMTCORE pThis);
+	uint32_t (*isConnected)(PEMTCORE pThis);
 
 	uint32_t (*connect)(PEMTCORE pThis, uint32_t uConnId, const uint64_t uParam0, const uint64_t uParam1);
 	uint32_t (*disconnect)(PEMTCORE pThis);
@@ -38,6 +39,7 @@ struct _EMTCOREOPS
 
 	/* callback */
 	void (*notified)(PEMTCORE pThis);
+	void (*queued)(PEMTCORE pThis, void * pMem);
 };
 
 struct _EMTCORESINKOPS
@@ -49,10 +51,11 @@ struct _EMTCORESINKOPS
 	void (*received)(void * pThis, void * pMem, const uint64_t uParam0, const uint64_t uParam1);
 
 	/* support */
-	void * (*getShareMemory)(void * pThis, uint32_t uLen);
+	void * (*getShareMemory)(void * pThis, const uint32_t uLen);
 	void (*releaseShareMemory)(void * pThis, void * pMem);
 
 	void (*notify)(void * pThis);
+	void (*queue)(void * pThis, void * pMem);
 
 	/* fallback */
 	void * (*allocSys)(void * pThis, const uint32_t uLen);
@@ -72,12 +75,13 @@ struct _EMTCORE
 	volatile uint32_t * pPeerIdL;
 	volatile uint32_t * pPeerIdR;
 	uint32_t uConnId;
+	uint32_t uFlags;
 
 	void * pMem;
 	void * pMemEnd;
 
 	EMTMULTIPOOL sMultiPool;
-	EMTMULTIPOOLCONFIG sMultiPoolConfig[2];
+	EMTMULTIPOOLCONFIG sMultiPoolConfig[3];
 };
 
 EXTERN_C PCEMTCOREOPS emtCore(void);

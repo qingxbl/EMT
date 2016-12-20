@@ -30,31 +30,39 @@ enum
 	kPageSize = 1 << kPageShift,
 	kPageMask = kPageSize - 1,
 
-	kEMTCoreConnMax = 256,
-
 	kEMTCoreSend = 0,
 	kEMTCorePartial = 1,
 	kEMTCoreConnect = 2,
 	kEMTCoreDisconnect = 3,
 	kEMTCoreTypeMask = (1 << 2) - 1,
+
+	kEMTCoreFlagConnect = 1,
+};
+
+typedef struct _EMTCOREMEMMETA EMTCOREMEMMETA, * PEMTCOREMEMMETA;
+struct _EMTCOREMEMMETA
+{
+	uint32_t uLen;
 };
 
 static const EMTMULTIPOOLCONFIG sMultiPoolConfig[] =
 {
-	{ 32, 4 * 1024, 4 },
-	{ 512, 2 * 512, 4 },
+	{ 32, 32 * 1024, 4 },
+	{ 512, 2 * 1024 * 4, 4 },
 	{ 1024 * 64, 16 * 16, 64 }
 };
 
-static uint32_t EMTCore_construct(PEMTCORE pThis, PEMTCORESINKOPS pSinkOps, void * pSinkCtx);
+static void EMTCore_construct(PEMTCORE pThis, PEMTCORESINKOPS pSinkOps, void * pSinkCtx);
 static void EMTCore_destruct(PEMTCORE pThis);
 static uint32_t EMTCore_connId(PEMTCORE pThis);
+static uint32_t EMTCore_isConnected(PEMTCORE pThis);
 static uint32_t EMTCore_connect(PEMTCORE pThis, uint32_t uConnId, const uint64_t uParam0, const uint64_t uParam1);
 static uint32_t EMTCore_disconnect(PEMTCORE pThis);
 static void * EMTCore_alloc(PEMTCORE pThis, const uint32_t uLen);
 static void EMTCore_free(PEMTCORE pThis, void * pMem);
 static void EMTCore_send(PEMTCORE pThis, void * pMem, const uint64_t uParam0, const uint64_t uParam1);
 static void EMTCore_notified(PEMTCORE pThis);
+static void EMTCore_queued(PEMTCORE pThis, void * pMem);
 
 static void EMTCore_connected(PEMTCORE pThis, PEMTCOREBLOCKMETA pBlockMeta);
 static void EMTCore_disconnected(PEMTCORE pThis, PEMTCOREBLOCKMETA pBlockMeta);
@@ -78,13 +86,14 @@ static void EMTCore_transfer(PEMTCORE pThis, void * pMem, const uint64_t uFlags,
 		pThis->pSinkOps->notify(pThis->pSinkCtx);
 }
 
-static uint32_t EMTCore_construct(PEMTCORE pThis, PEMTCORESINKOPS pSinkOps, void * pSinkCtx)
+static void EMTCore_construct(PEMTCORE pThis, PEMTCORESINKOPS pSinkOps, void * pSinkCtx)
 {
 	uint32_t metaLen, memLen;
 	uint32_t i;
 	pThis->pSinkOps = pSinkOps;
 	pThis->pSinkCtx = pSinkCtx;
 	pThis->uConnId = kEMTCoreInvalidConn;
+	pThis->uFlags = 0;
 
 	pThis->sMultiPool.uPoolCount = sizeof(pThis->sMultiPoolConfig) / sizeof(EMTMULTIPOOLCONFIG);
 	for (i = 0; i < pThis->sMultiPool.uPoolCount; ++i)
@@ -107,12 +116,20 @@ static uint32_t EMTCore_construct(PEMTCORE pThis, PEMTCORESINKOPS pSinkOps, void
 
 static void EMTCore_destruct(PEMTCORE pThis)
 {
+	if (pThis->uConnId != kEMTCoreInvalidConn && *pThis->pPeerIdL == 0 && *pThis->pPeerIdR == 0)
+		emtMultiPool()->free(&pThis->sMultiPool, emtMultiPool()->take(&pThis->sMultiPool, pThis->uConnId));
+
 	pThis->pSinkOps->releaseShareMemory(pThis->pSinkCtx, pThis->pMem);
 }
 
 static uint32_t EMTCore_connId(PEMTCORE pThis)
 {
 	return pThis->uConnId;
+}
+
+uint32_t EMTCore_isConnected(PEMTCORE pThis)
+{
+	return pThis->uFlags & kEMTCoreFlagConnect;
 }
 
 static uint32_t EMTCore_connect(PEMTCORE pThis, uint32_t uConnId, const uint64_t uParam0, const uint64_t uParam1)
@@ -126,25 +143,48 @@ static uint32_t EMTCore_connect(PEMTCORE pThis, uint32_t uConnId, const uint64_t
 	pThis->pPeerIdL = connMeta->uPeerId + (isNewConn ? 0 : 1);
 	pThis->pPeerIdR = connMeta->uPeerId + (isNewConn ? 1 : 0);
 
-	if (!isNewConn)
-		EMTCore_notified(pThis);
+	*pThis->pPeerIdL = emtMultiPool()->id(&pThis->sMultiPool);
+	if (isNewConn)
+	{
+		*pThis->pPeerIdR = 0;
+		emtLinkList()->init(pThis->pConnHeadL);
+		emtLinkList()->init(pThis->pConnHeadR);
+	}
 
-	EMTCore_transfer(pThis, 0, kEMTCoreConnect, uParam0, uParam1, !isNewConn);
+	EMTCore_transfer(pThis, 0, kEMTCoreConnect, uParam0, uParam1, 0);
+
+	if (!isNewConn)
+	{
+		EMTCore_notified(pThis);
+		pThis->pSinkOps->notify(pThis->pSinkCtx);
+	}
+
+	return pThis->uConnId;
 }
 
 static uint32_t EMTCore_disconnect(PEMTCORE pThis)
 {
-	if (pThis->uConnId == kEMTCoreInvalidConn)
-	{
-		EMTCore_transfer(pThis, 0, kEMTCoreDisconnect, 0, 0, 1);
-	}
+	if (pThis->uConnId == kEMTCoreInvalidConn || *pThis->pPeerIdL == 0)
+		return 0;
+
+	*pThis->pPeerIdL = 0;
+	EMTCore_transfer(pThis, 0, kEMTCoreDisconnect, 0, 0, 1);
+
+	return 0;
 }
 
 static void * EMTCore_alloc(PEMTCORE pThis, const uint32_t uLen)
 {
 	void * ret = emtMultiPool()->alloc(&pThis->sMultiPool, uLen);
 
-	return ret ? ret : pThis->pSinkOps->allocSys(pThis->pSinkCtx, uLen);
+	if (!ret)
+	{
+		PEMTCOREMEMMETA memMeta = (PEMTCOREMEMMETA)pThis->pSinkOps->allocSys(pThis->pSinkCtx, uLen);
+		memMeta->uLen = uLen;
+		ret = memMeta + 1;
+	}
+
+	return ret;
 }
 
 static void EMTCore_free(PEMTCORE pThis, void * pMem)
@@ -152,7 +192,7 @@ static void EMTCore_free(PEMTCORE pThis, void * pMem)
 	if (EMTCore_isSharedMemory(pThis, pMem))
 		emtMultiPool()->free(&pThis->sMultiPool, pMem);
 	else
-		pThis->pSinkOps->freeSys(pThis->pSinkCtx, pMem);
+		pThis->pSinkOps->freeSys(pThis->pSinkCtx, (PEMTCOREMEMMETA)pMem - 1);
 }
 
 static void EMTCore_send(PEMTCORE pThis, void * pMem, const uint64_t uParam0, const uint64_t uParam1)
@@ -170,19 +210,19 @@ static void EMTCore_notified(PEMTCORE pThis)
 		PEMTCOREBLOCKMETA curr = blockMeta;
 		blockMeta = (PEMTCOREBLOCKMETA)emtLinkList()->next(&blockMeta->sNext);
 
-		switch (blockMeta->uFlags & kEMTCoreTypeMask)
+		switch (curr->uFlags & kEMTCoreTypeMask)
 		{
 		case kEMTCoreSend:
-			EMTCore_received(pThis, blockMeta);
+			EMTCore_received(pThis, curr);
 			break;
 		case kEMTCorePartial:
-			EMTCore_received(pThis, blockMeta);
+			EMTCore_received(pThis, curr);
 			break;
 		case kEMTCoreConnect:
-			EMTCore_connected(pThis, blockMeta);
+			EMTCore_connected(pThis, curr);
 			break;
 		case kEMTCoreDisconnect:
-			EMTCore_disconnected(pThis, blockMeta);
+			EMTCore_disconnected(pThis, curr);
 			break;
 		}
 
@@ -190,13 +230,19 @@ static void EMTCore_notified(PEMTCORE pThis)
 	}
 }
 
+void EMTCore_queued(PEMTCORE pThis, void * pMem)
+{
+}
+
 static void EMTCore_connected(PEMTCORE pThis, PEMTCOREBLOCKMETA pBlockMeta)
 {
 	pThis->pSinkOps->connected(pThis->pSinkCtx, pBlockMeta->uParam0, pBlockMeta->uParam1);
+	pThis->uFlags |= kEMTCoreFlagConnect;
 }
 
 static void EMTCore_disconnected(PEMTCORE pThis, PEMTCOREBLOCKMETA pBlockMeta)
 {
+	pThis->uFlags &= ~kEMTCoreFlagConnect;
 	pThis->pSinkOps->disconnected(pThis->pSinkCtx);
 }
 
@@ -213,12 +259,14 @@ PCEMTCOREOPS emtCore(void)
 		EMTCore_construct,
 		EMTCore_destruct,
 		EMTCore_connId,
+		EMTCore_isConnected,
 		EMTCore_connect,
 		EMTCore_disconnect,
 		EMTCore_alloc,
 		EMTCore_free,
 		EMTCore_send,
 		EMTCore_notified,
+		EMTCore_queued,
 	};
 
 	return &sOps;
