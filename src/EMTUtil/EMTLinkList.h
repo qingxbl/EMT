@@ -32,4 +32,20 @@ struct _EMTLINKLISTNODE
 
 EXTERN_C PCEMTLINKLISTOPS emtLinkList(void);
 
+#if !defined(USE_VTABLE) || defined(EMTIMPL_LINKLIST)
+EMTIMPL_CALL void EMTLinkList_init(PEMTLINKLISTNODE head);
+EMTIMPL_CALL void EMTLinkList_prepend(PEMTLINKLISTNODE head, PEMTLINKLISTNODE node);
+EMTIMPL_CALL PEMTLINKLISTNODE EMTLinkList_next(PEMTLINKLISTNODE node);
+EMTIMPL_CALL PEMTLINKLISTNODE EMTLinkList_takeFirst(PEMTLINKLISTNODE head);
+EMTIMPL_CALL PEMTLINKLISTNODE EMTLinkList_detach(PEMTLINKLISTNODE head);
+EMTIMPL_CALL PEMTLINKLISTNODE EMTLinkList_reverse(PEMTLINKLISTNODE node);
+#else
+#define EMTLinkList_init emtLinkList()->init
+#define EMTLinkList_prepend emtLinkList()->prepend
+#define EMTLinkList_next emtLinkList()->next
+#define EMTLinkList_takeFirst emtLinkList()->takeFirst
+#define EMTLinkList_detach emtLinkList()->detach
+#define EMTLinkList_reverse emtLinkList()->reverse
+#endif
+
 #endif // __EMTLINKLIST_H__

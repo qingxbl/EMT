@@ -19,7 +19,7 @@ struct DECLSPEC_NOVTABLE IEMTIPCWinPipeHandler : public IEMTPipeHandler
 template <bool SERVER>
 class EMTIPCWinPipeHandler : public IEMTIPCWinPipeHandler
 {
-	IMPL_IEMTUNKNOWN;
+	EMTIMPL_IEMTUNKNOWN;
 
 public:
 	explicit EMTIPCWinPipeHandler(EMTIPCWinPrivate * pHost);
@@ -159,7 +159,7 @@ void EMTIPCWinPrivate::sys_notified()
 uint32_t EMTIPCPrivate::sys_connect(uint32_t uConnId)
 {
 	EMTIPCWinPrivate * sys = (EMTIPCWinPrivate *)this;
-	return emtCore()->connect(&mCore, uConnId, ::GetCurrentProcessId(), (uintptr_t)sys->mEventL);
+	return EMTCore_connect(&mCore, uConnId, ::GetCurrentProcessId(), (uintptr_t)sys->mEventL);
 }
 
 void EMTIPCPrivate::sys_connected(const uint64_t uParam0, const uint64_t uParam1)

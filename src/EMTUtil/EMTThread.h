@@ -37,7 +37,7 @@ IEMTThread * createEMTThread(void);
 template <class T>
 struct EMTWaitable : public IEMTWaitable, public T
 {
-	IMPL_IEMTUNKNOWN;
+	EMTIMPL_IEMTUNKNOWN;
 
 	explicit EMTWaitable(T func, bool autoDestroy) : T(func), autoDestroy(autoDestroy) { }
 	explicit EMTWaitable(T func, void * handle, bool autoDestroy) : T(func), handle(handle), autoDestroy(autoDestroy) { }

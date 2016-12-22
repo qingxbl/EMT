@@ -29,7 +29,7 @@ struct DECLSPEC_NOVTABLE IEMTUnknown
 	virtual void destruct() = 0;
 };
 
-#define IMPL_IEMTUNKNOWN virtual void destruct() { delete this; }
+#define EMTIMPL_IEMTUNKNOWN virtual void destruct() { delete this; }
 
 struct IEMTUnknown_Delete
 {
@@ -61,5 +61,12 @@ struct IEMTUnknown_Delete
 #endif // __cplusplus
 #define EMT_D(TYPE) EMT_PRIVATE(TYPE, d_ptr, d)
 #endif // EMT_PRIVATE
+
+// #define USE_VTABLE
+#ifndef USE_VTABLE
+#define EMTIMPL_CALL EXTERN_C
+#else
+#define EMTIMPL_CALL static
+#endif // USE_VTABLE
 
 #endif // __EMTCOMMON_H__

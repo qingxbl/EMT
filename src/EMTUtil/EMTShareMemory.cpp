@@ -8,7 +8,7 @@ BEGIN_NAMESPACE_ANONYMOUS
 
 class EMTShareMemory : public IEMTShareMemory
 {
-	IMPL_IEMTUNKNOWN;
+	EMTIMPL_IEMTUNKNOWN;
 
 public:
 	explicit EMTShareMemory(const wchar_t * name);

@@ -26,7 +26,7 @@ static void timeUsage(const char *fmt, const FILETIME &start, const FILETIME &en
 
 class IPCHandler : public IEMTIPCSink
 {
-	IMPL_IEMTUNKNOWN;
+	EMTIMPL_IEMTUNKNOWN;
 
 public:
 	enum HandlerType : uint32_t
@@ -225,7 +225,7 @@ static int test_queue()
 
 class MySemaphore : public IEMTWaitable
 {
-	IMPL_IEMTUNKNOWN;
+	EMTIMPL_IEMTUNKNOWN;
 
 public:
 	MySemaphore(IEMTThread * thread, HANDLE semaphore);

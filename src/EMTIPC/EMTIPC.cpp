@@ -12,7 +12,7 @@ EMTIPCPrivate::EMTIPCPrivate()
 
 EMTIPCPrivate::~EMTIPCPrivate()
 {
-	emtCore()->destruct(&mCore);
+	EMTCore_destruct(&mCore);
 
 	mShareMemory->destruct();
 }
@@ -23,12 +23,12 @@ void EMTIPCPrivate::init(IEMTThread * pThread, IEMTShareMemory * pShareMemory, I
 	mShareMemory = pShareMemory;
 	mSink = pSink;
 
-	emtCore()->construct(&mCore, emtCoreSink(), this);
+	EMTCore_construct(&mCore, emtCoreSink(), this);
 }
 
 void EMTIPCPrivate::notified()
 {
-	emtCore()->notified(&mCore);
+	EMTCore_notified(&mCore);
 }
 
 void EMTIPCPrivate::connected(EMTIPCPrivate * pThis, const uint64_t uParam0, const uint64_t uParam1)
@@ -81,7 +81,7 @@ void EMTIPCPrivate::notify(EMTIPCPrivate * pThis)
 
 void EMTIPCPrivate::queue(EMTIPCPrivate * pThis, void * pMem)
 {
-	pThis->mThread->queue(createEMTRunnable(std::bind(emtCore()->queued, &pThis->mCore, pMem)));
+	pThis->mThread->queue(createEMTRunnable(std::bind(EMTCore_queued, &pThis->mCore, pMem)));
 }
 
 void * EMTIPCPrivate::allocSys(EMTIPCPrivate * pThis, const uint32_t uLen)
@@ -146,13 +146,13 @@ IEMTIPCSink * EMTIPC::sink() const
 uint32_t EMTIPC::connId()
 {
 	EMT_D(EMTIPC);
-	return emtCore()->connId(&d->mCore);
+	return EMTCore_connId(&d->mCore);
 }
 
 bool EMTIPC::isConnected()
 {
 	EMT_D(EMTIPC);
-	return emtCore()->isConnected(&d->mCore) != 0;
+	return EMTCore_isConnected(&d->mCore) != 0;
 }
 
 uint32_t EMTIPC::connect(uint32_t uConnId)
@@ -164,19 +164,19 @@ uint32_t EMTIPC::connect(uint32_t uConnId)
 uint32_t EMTIPC::disconnect()
 {
 	EMT_D(EMTIPC);
-	return emtCore()->disconnect(&d->mCore);
+	return EMTCore_disconnect(&d->mCore);
 }
 
 void * EMTIPC::alloc(const uint32_t uLen)
 {
 	EMT_D(EMTIPC);
-	return emtCore()->alloc(&d->mCore, uLen);
+	return EMTCore_alloc(&d->mCore, uLen);
 }
 
 void EMTIPC::free(void * pMem)
 {
 	EMT_D(EMTIPC);
-	return emtCore()->free(&d->mCore, pMem);
+	return EMTCore_free(&d->mCore, pMem);
 }
 
 void EMTIPC::send(void * pMem)

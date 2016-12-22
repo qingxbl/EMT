@@ -11,7 +11,7 @@ BEGIN_NAMESPACE_ANONYMOUS
 
 class EMTWorkThread : public IEMTThread
 {
-	IMPL_IEMTUNKNOWN;
+	EMTIMPL_IEMTUNKNOWN;
 
 public:
 	explicit EMTWorkThread();

@@ -1,3 +1,4 @@
+#define EMTIMPL_MULTIPOOL
 #include "EMTMultiPool.h"
 
 #pragma pack(push, 1)
@@ -16,19 +17,6 @@ enum
 	kEMTMultiPoolInvalidToken = ~0x0,
 };
 
-static void EMTMultiPool_calcMetaSize(PEMTMULTIPOOL pThis, uint32_t * pMetaLen, uint32_t * pMemLen);
-static void EMTMultiPool_construct(PEMTMULTIPOOL pThis, void * pMeta, void * pPool);
-static void EMTMultiPool_destruct(PEMTMULTIPOOL pThis);
-static const uint32_t EMTMultiPool_id(PEMTMULTIPOOL pThis);
-static const PEMTPOOL EMTMultiPool_pool(PEMTMULTIPOOL pThis, const uint32_t uPool);
-static const PEMTPOOL EMTMultiPool_poolByMem(PEMTMULTIPOOL pThis, void * pMem);
-static const uint32_t EMTMultiPool_length(PEMTMULTIPOOL pThis, void * pMem);
-static void * EMTMultiPool_alloc(PEMTMULTIPOOL pThis, const uint32_t uMemLen);
-static void EMTMultiPool_free(PEMTMULTIPOOL pThis, void * pMem);
-static void EMTMultiPool_freeAll(PEMTMULTIPOOL pThis, const uint32_t uId);
-static const uint32_t EMTMultiPool_transfer(PEMTMULTIPOOL pThis, void * pMem, const uint32_t uToId);
-static void * EMTMultiPool_take(PEMTMULTIPOOL pThis, const uint32_t uToken);
-
 static PEMTMULTIPOOLCONFIG EMTMultiPool_poolConfig(PEMTMULTIPOOL pThis, const uint32_t uPool)
 {
 	return uPool < pThis->uPoolCount ? (PEMTMULTIPOOLCONFIG)(pThis + 1) + uPool : 0;
@@ -42,7 +30,7 @@ static PEMTMULTIPOOLCONFIG EMTMultiPool_poolConfigByMem(PEMTMULTIPOOL pThis, voi
 	return EMTMultiPool_poolConfig(pThis, pThis->pMemMap[((uint8_t *)pMem - (uint8_t *)pThis->pMem) >> kEMTMultiPoolPageShift]);
 }
 
-static void EMTMultiPool_calcMetaSize(PEMTMULTIPOOL pThis, uint32_t * pMetaLen, uint32_t * pMemLen)
+void EMTMultiPool_calcMetaSize(PEMTMULTIPOOL pThis, uint32_t * pMetaLen, uint32_t * pMemLen)
 {
 	PEMTMULTIPOOLCONFIG poolConfig = EMTMultiPool_poolConfig(pThis, 0);
 	PEMTMULTIPOOLCONFIG poolConfigEnd = poolConfig + pThis->uPoolCount;
@@ -52,13 +40,13 @@ static void EMTMultiPool_calcMetaSize(PEMTMULTIPOOL pThis, uint32_t * pMetaLen, 
 	for (; poolConfig < poolConfigEnd; ++poolConfig)
 	{
 		uint32_t poolMetaLen, poolMemLen;
-		emtPool()->calcMetaSize(poolConfig->uBlockCount, poolConfig->uBlockLength, &poolMetaLen, &poolMemLen);
+		EMTPool_calcMetaSize(poolConfig->uBlockCount, poolConfig->uBlockLength, &poolMetaLen, &poolMemLen);
 		*pMetaLen += poolMetaLen + (poolConfig->uBlockLength * poolConfig->uBlockCount >> kEMTMultiPoolPageShift);
 		*pMemLen += poolMemLen;
 	}
 }
 
-static void EMTMultiPool_construct(PEMTMULTIPOOL pThis, void * pMeta, void * pPool)
+void EMTMultiPool_construct(PEMTMULTIPOOL pThis, void * pMeta, void * pPool)
 {
 	uint8_t * meta = (uint8_t *)pMeta;
 	uint8_t * mem = (uint8_t *)pPool;
@@ -77,9 +65,9 @@ static void EMTMultiPool_construct(PEMTMULTIPOOL pThis, void * pMeta, void * pPo
 	{
 		poolConfig = EMTMultiPool_poolConfig(pThis, i);
 		uint32_t poolMetaLen, poolMemLen;
-		emtPool()->calcMetaSize(poolConfig->uBlockCount, poolConfig->uBlockLength, &poolMetaLen, &poolMemLen);
+		EMTPool_calcMetaSize(poolConfig->uBlockCount, poolConfig->uBlockLength, &poolMetaLen, &poolMemLen);
 
-		emtPool()->construct(&poolConfig->sPool, pThis->uId, poolConfig->uBlockCount, poolConfig->uBlockLength, poolConfig->uBlockLimit, meta, mem);
+		EMTPool_construct(&poolConfig->sPool, pThis->uId, poolConfig->uBlockCount, poolConfig->uBlockLength, poolConfig->uBlockLimit, meta, mem);
 		meta += poolMetaLen;
 		mem += poolMemLen;
 		poolConfig->uBlockLimitLength = poolConfig->uBlockLength * poolConfig->uBlockLimit;
@@ -101,41 +89,41 @@ static void EMTMultiPool_construct(PEMTMULTIPOOL pThis, void * pMeta, void * pPo
 	pThis->uBlockLimitLength = poolConfig->uBlockLength * poolConfig->uBlockCount;
 }
 
-static void EMTMultiPool_destruct(PEMTMULTIPOOL pThis)
+void EMTMultiPool_destruct(PEMTMULTIPOOL pThis)
 {
 	PEMTMULTIPOOLCONFIG poolConfig = EMTMultiPool_poolConfig(pThis, 0);
 	PEMTMULTIPOOLCONFIG poolConfigEnd = poolConfig + pThis->uPoolCount;
 
 	for (; poolConfig < poolConfigEnd; ++poolConfig)
 	{
-		emtPool()->destruct(&poolConfig->sPool);
+		EMTPool_destruct(&poolConfig->sPool);
 	}
 }
 
-static const uint32_t EMTMultiPool_id(PEMTMULTIPOOL pThis)
+const uint32_t EMTMultiPool_id(PEMTMULTIPOOL pThis)
 {
 	return pThis->uId;
 }
 
-static const PEMTPOOL EMTMultiPool_pool(PEMTMULTIPOOL pThis, const uint32_t uPool)
+const PEMTPOOL EMTMultiPool_pool(PEMTMULTIPOOL pThis, const uint32_t uPool)
 {
 	PEMTMULTIPOOLCONFIG poolConfig = EMTMultiPool_poolConfig(pThis, uPool);
 	return poolConfig ? &poolConfig->sPool : 0;
 }
 
-static const PEMTPOOL EMTMultiPool_poolByMem(PEMTMULTIPOOL pThis, void * pMem)
+const PEMTPOOL EMTMultiPool_poolByMem(PEMTMULTIPOOL pThis, void * pMem)
 {
 	PEMTMULTIPOOLCONFIG poolConfig = EMTMultiPool_poolConfigByMem(pThis, pMem);
 	return poolConfig ? &poolConfig->sPool : 0;
 }
 
-static const uint32_t EMTMultiPool_length(PEMTMULTIPOOL pThis, void * pMem)
+const uint32_t EMTMultiPool_length(PEMTMULTIPOOL pThis, void * pMem)
 {
 	PEMTPOOL pool = EMTMultiPool_poolByMem(pThis, pMem);
-	return pool ? emtPool()->length(pool, pMem) : 0;
+	return pool ? EMTPool_length(pool, pMem) : 0;
 }
 
-static void * EMTMultiPool_alloc(PEMTMULTIPOOL pThis, const uint32_t uMemLen)
+void * EMTMultiPool_alloc(PEMTMULTIPOOL pThis, const uint32_t uMemLen)
 {
 	PEMTMULTIPOOLCONFIG poolConfig = EMTMultiPool_poolConfig(pThis, 0);
 	PEMTMULTIPOOLCONFIG poolConfigEnd = poolConfig + pThis->uPoolCount;
@@ -146,37 +134,37 @@ static void * EMTMultiPool_alloc(PEMTMULTIPOOL pThis, const uint32_t uMemLen)
 	for (; poolConfig < poolConfigEnd; ++poolConfig)
 	{
 		if (uMemLen <= poolConfig->uBlockLimitLength)
-			return emtPool()->alloc(&poolConfig->sPool, uMemLen);
+			return EMTPool_alloc(&poolConfig->sPool, uMemLen);
 	}
 
 	return 0;
 }
 
-static void EMTMultiPool_free(PEMTMULTIPOOL pThis, void * pMem)
+void EMTMultiPool_free(PEMTMULTIPOOL pThis, void * pMem)
 {
 	PEMTPOOL pool = EMTMultiPool_poolByMem(pThis, pMem);
-	pool ? emtPool()->free(pool, pMem) : 0;
+	pool ? EMTPool_free(pool, pMem) : 0;
 }
 
-static void EMTMultiPool_freeAll(PEMTMULTIPOOL pThis, const uint32_t uId)
+void EMTMultiPool_freeAll(PEMTMULTIPOOL pThis, const uint32_t uId)
 {
 	PEMTMULTIPOOLCONFIG poolConfig = EMTMultiPool_poolConfig(pThis, 0);
 	PEMTMULTIPOOLCONFIG poolConfigEnd = poolConfig + pThis->uPoolCount;
 
 	for (; poolConfig < poolConfigEnd; ++poolConfig)
 	{
-		emtPool()->freeAll(&poolConfig->sPool, uId);
+		EMTPool_freeAll(&poolConfig->sPool, uId);
 	}
 }
 
-static const uint32_t EMTMultiPool_transfer(PEMTMULTIPOOL pThis, void * pMem, const uint32_t uToId)
+const uint32_t EMTMultiPool_transfer(PEMTMULTIPOOL pThis, void * pMem, const uint32_t uToId)
 {
 	PEMTMULTIPOOLCONFIG poolConfig = EMTMultiPool_poolConfigByMem(pThis, pMem);
 
 	if (poolConfig)
 	{
 		const uint32_t poolId = (poolConfig - EMTMultiPool_poolConfig(pThis, 0)) << kEMTMultiPoolPoolIdShift;
-		const uint32_t token = emtPool()->transfer(&poolConfig->sPool, pMem, uToId) & kEMTMultiPoolTokenMask;
+		const uint32_t token = EMTPool_transfer(&poolConfig->sPool, pMem, uToId) & kEMTMultiPoolTokenMask;
 
 		return poolId | token;
 	}
@@ -184,7 +172,7 @@ static const uint32_t EMTMultiPool_transfer(PEMTMULTIPOOL pThis, void * pMem, co
 	return kEMTMultiPoolInvalidToken;
 }
 
-static void * EMTMultiPool_take(PEMTMULTIPOOL pThis, const uint32_t uToken)
+void * EMTMultiPool_take(PEMTMULTIPOOL pThis, const uint32_t uToken)
 {
 	const uint8_t poolId = uToken >> kEMTMultiPoolPoolIdShift;
 	const uint32_t token = uToken & kEMTMultiPoolTokenMask;
@@ -192,7 +180,7 @@ static void * EMTMultiPool_take(PEMTMULTIPOOL pThis, const uint32_t uToken)
 
 	if (poolConfig)
 	{
-		return emtPool()->take(&poolConfig->sPool, token);
+		return EMTPool_take(&poolConfig->sPool, token);
 	}
 
 	return 0;

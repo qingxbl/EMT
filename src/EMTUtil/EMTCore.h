@@ -86,4 +86,36 @@ struct _EMTCORE
 
 EXTERN_C PCEMTCOREOPS emtCore(void);
 
+#if !defined(USE_VTABLE) || defined(EMTIMPL_CORE)
+EMTIMPL_CALL void EMTCore_construct(PEMTCORE pThis, PEMTCORESINKOPS pSinkOps, void * pSinkCtx);
+EMTIMPL_CALL void EMTCore_destruct(PEMTCORE pThis);
+EMTIMPL_CALL uint32_t EMTCore_connId(PEMTCORE pThis);
+EMTIMPL_CALL uint32_t EMTCore_isConnected(PEMTCORE pThis);
+EMTIMPL_CALL uint32_t EMTCore_connect(PEMTCORE pThis, uint32_t uConnId, const uint64_t uParam0, const uint64_t uParam1);
+EMTIMPL_CALL uint32_t EMTCore_disconnect(PEMTCORE pThis);
+EMTIMPL_CALL void * EMTCore_alloc(PEMTCORE pThis, const uint32_t uLen);
+EMTIMPL_CALL void EMTCore_free(PEMTCORE pThis, void * pMem);
+EMTIMPL_CALL void EMTCore_send(PEMTCORE pThis, void * pMem, const uint64_t uParam0, const uint64_t uParam1);
+EMTIMPL_CALL void EMTCore_notified(PEMTCORE pThis);
+EMTIMPL_CALL void EMTCore_queued(PEMTCORE pThis, void * pMem);
+EMTIMPL_CALL void EMTCore_connected(PEMTCORE pThis, PEMTCOREBLOCKMETA pBlockMeta);
+EMTIMPL_CALL void EMTCore_disconnected(PEMTCORE pThis, PEMTCOREBLOCKMETA pBlockMeta);
+EMTIMPL_CALL void EMTCore_received(PEMTCORE pThis, PEMTCOREBLOCKMETA pBlockMeta);
+#else
+#define EMTCore_construct emtCore()->construct
+#define EMTCore_destruct emtCore()->destruct
+#define EMTCore_connId emtCore()->connId
+#define EMTCore_isConnected emtCore()->isConnected
+#define EMTCore_connect emtCore()->connect
+#define EMTCore_disconnect emtCore()->disconnect
+#define EMTCore_alloc emtCore()->alloc
+#define EMTCore_free emtCore()->free
+#define EMTCore_send emtCore()->send
+#define EMTCore_notified emtCore()->notified
+#define EMTCore_queued emtCore()->queued
+#define EMTCore_connected emtCore()->connected
+#define EMTCore_disconnected emtCore()->disconnected
+#define EMTCore_received emtCore()->received
+#endif
+
 #endif // __EMTCORE_H__

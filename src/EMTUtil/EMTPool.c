@@ -1,3 +1,4 @@
+#define EMTIMPL_POOL
 #include "EMTPool.h"
 
 #pragma pack(push, 1)
@@ -29,21 +30,6 @@ enum
 	kEMTPoolNotOwner,
 };
 
-static void EMTPool_calcMetaSize(const uint32_t uBlockCount, const uint32_t uBlockLen, uint32_t * pMetaLen, uint32_t * pMemLen);
-static void EMTPool_construct(PEMTPOOL pThis, const uint32_t uId, const uint32_t uBlockCount, const uint32_t uBlockLen, const uint32_t uBlockInit, void * pMeta, void * pPool);
-static void EMTPool_destruct(PEMTPOOL pThis);
-static const uint32_t EMTPool_id(PEMTPOOL pThis);
-static void * EMTPool_address(PEMTPOOL pThis);
-static const uint32_t EMTPool_poolLength(PEMTPOOL pThis);
-static const uint32_t EMTPool_blockLength(PEMTPOOL pThis);
-static const uint32_t EMTPool_blockCount(PEMTPOOL pThis);
-static const uint32_t EMTPool_length(PEMTPOOL pThis, void * pMem);
-static void * EMTPool_alloc(PEMTPOOL pThis, const uint32_t uMemLen);
-static void EMTPool_free(PEMTPOOL pThis, void * pMem);
-static void EMTPool_freeAll(PEMTPOOL pThis, const uint32_t uId);
-static const uint32_t EMTPool_transfer(PEMTPOOL pThis, void * pMem, const uint32_t uToId);
-static void * EMTPool_take(PEMTPOOL pThis, const uint32_t uToken);
-
 static const uint32_t EMTPool_blockFromAddress(PEMTPOOL pThis, void * pMem)
 {
 	return ((uint8_t *)pMem - (uint8_t *)pThis->pPool) / pThis->pMeta->uBlockLen;
@@ -63,13 +49,13 @@ static int32_t EMTPool_validation(PEMTPOOL pThis, void * pMem)
 	return kEMTPoolNoError;
 }
 
-static void EMTPool_calcMetaSize(const uint32_t uBlockCount, const uint32_t uBlockLen, uint32_t * pMetaLen, uint32_t * pMemLen)
+void EMTPool_calcMetaSize(const uint32_t uBlockCount, const uint32_t uBlockLen, uint32_t * pMetaLen, uint32_t * pMemLen)
 {
 	*pMetaLen = sizeof(EMTPOOLMETA) + sizeof(EMTPOOLBLOCKMETA) * uBlockCount;
 	*pMemLen = uBlockLen * uBlockCount;
 }
 
-static void EMTPool_construct(PEMTPOOL pThis, const uint32_t uId, const uint32_t uBlockCount, const uint32_t uBlockLen, const uint32_t uBlockInit, void * pMeta, void * pPool)
+void EMTPool_construct(PEMTPOOL pThis, const uint32_t uId, const uint32_t uBlockCount, const uint32_t uBlockLen, const uint32_t uBlockInit, void * pMeta, void * pPool)
 {
 	volatile uint32_t * pInitStatus;
 	uint32_t i;
@@ -95,44 +81,44 @@ static void EMTPool_construct(PEMTPOOL pThis, const uint32_t uId, const uint32_t
 		pThis->pBlockMeta[i].uLen = uBlockInit;
 }
 
-static void EMTPool_destruct(PEMTPOOL pThis)
+void EMTPool_destruct(PEMTPOOL pThis)
 {
 	EMTPool_freeAll(pThis, pThis->uId);
 }
 
-static const uint32_t EMTPool_id(PEMTPOOL pThis)
+const uint32_t EMTPool_id(PEMTPOOL pThis)
 {
 	return pThis->uId;
 }
 
-static void * EMTPool_address(PEMTPOOL pThis)
+void * EMTPool_address(PEMTPOOL pThis)
 {
 	return pThis->pPool;
 }
 
-static const uint32_t EMTPool_poolLength(PEMTPOOL pThis)
+const uint32_t EMTPool_poolLength(PEMTPOOL pThis)
 {
 	return pThis->pMeta->uBlockLen * pThis->pMeta->uBlockCount;
 }
 
-static const uint32_t EMTPool_blockLength(PEMTPOOL pThis)
+const uint32_t EMTPool_blockLength(PEMTPOOL pThis)
 {
 	return pThis->pMeta->uBlockLen;
 }
 
-static const uint32_t EMTPool_blockCount(PEMTPOOL pThis)
+const uint32_t EMTPool_blockCount(PEMTPOOL pThis)
 {
 	return pThis->pMeta->uBlockCount;
 }
 
-static const uint32_t EMTPool_length(PEMTPOOL pThis, void * pMem)
+const uint32_t EMTPool_length(PEMTPOOL pThis, void * pMem)
 {
 	const uint32_t uBlock = EMTPool_blockFromAddress(pThis, pMem);
 	PEMTPOOLBLOCKMETA pBlockMeta = pThis->pBlockMeta + uBlock;
 	return pBlockMeta->uAllocLen;
 }
 
-static void * EMTPool_alloc(PEMTPOOL pThis, const uint32_t uMemLen)
+void * EMTPool_alloc(PEMTPOOL pThis, const uint32_t uMemLen)
 {
 	const uint32_t uBlocks = (uMemLen + pThis->pMeta->uBlockLen - 1) / pThis->pMeta->uBlockLen;
 	PEMTPOOLBLOCKMETA pBlockMeta = 0;
@@ -196,7 +182,7 @@ static void * EMTPool_alloc(PEMTPOOL pThis, const uint32_t uMemLen)
 	return pBlockMeta ? (uint8_t *)pThis->pPool + pThis->pMeta->uBlockLen * (pBlockMeta - pThis->pBlockMeta) : 0;
 }
 
-static void EMTPool_free(PEMTPOOL pThis, void * pMem)
+void EMTPool_free(PEMTPOOL pThis, void * pMem)
 {
 	const uint32_t uBlock = EMTPool_blockFromAddress(pThis, pMem);
 	PEMTPOOLBLOCKMETA pBlockMeta = pThis->pBlockMeta + uBlock;
@@ -207,7 +193,7 @@ static void EMTPool_free(PEMTPOOL pThis, void * pMem)
 	pBlockMeta->uOwner = 0;
 }
 
-static void EMTPool_freeAll(PEMTPOOL pThis, const uint32_t uId)
+void EMTPool_freeAll(PEMTPOOL pThis, const uint32_t uId)
 {
 	PEMTPOOLBLOCKMETA pBlockMetaCur = pThis->pBlockMeta;
 	PEMTPOOLBLOCKMETA pBlockMetaEnd = pThis->pBlockMeta + pThis->pMeta->uBlockCount;
@@ -222,7 +208,7 @@ static void EMTPool_freeAll(PEMTPOOL pThis, const uint32_t uId)
 	} while (pBlockMetaCur < pBlockMetaEnd);
 }
 
-static const uint32_t EMTPool_transfer(PEMTPOOL pThis, void * pMem, const uint32_t uToId)
+const uint32_t EMTPool_transfer(PEMTPOOL pThis, void * pMem, const uint32_t uToId)
 {
 	const uint32_t uBlock = EMTPool_blockFromAddress(pThis, pMem);
 	PEMTPOOLBLOCKMETA pBlockMeta = pThis->pBlockMeta + uBlock;
@@ -235,7 +221,7 @@ static const uint32_t EMTPool_transfer(PEMTPOOL pThis, void * pMem, const uint32
 	return uBlock;
 }
 
-static void * EMTPool_take(PEMTPOOL pThis, const uint32_t uToken)
+void * EMTPool_take(PEMTPOOL pThis, const uint32_t uToken)
 {
 	void * pMem = (uint8_t *)pThis->pPool + uToken * pThis->pMeta->uBlockLen;
 

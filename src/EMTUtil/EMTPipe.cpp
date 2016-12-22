@@ -62,7 +62,7 @@ enum
 
 class EMTPipe : public IEMTPipe
 {
-	IMPL_IEMTUNKNOWN;
+	EMTIMPL_IEMTUNKNOWN;
 
 public:
 	typedef OVERLAPPEDEX<EMTPipe> OVERLAPPED_EMTPipe;
@@ -110,7 +110,7 @@ private:
 
 class EMTPipeWaitConnect : public IEMTWaitable
 {
-	IMPL_IEMTUNKNOWN;
+	EMTIMPL_IEMTUNKNOWN;
 
 public:
 	explicit EMTPipeWaitConnect(EMTPipe * pipe);
