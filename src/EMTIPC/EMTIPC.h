@@ -15,9 +15,7 @@ struct DECLSPEC_NOVTABLE IEMTIPCSink : public IEMTUnknown
 	virtual void connected() = 0;
 	virtual void disconnected() = 0;
 
-	virtual void received(void * pMem) = 0;
-	virtual void called(void * pMem, const uint32_t uContext) = 0;
-	virtual void resulted(void * pMem, const uint32_t uContext) = 0;
+	virtual void received(void * pMem, const uint64_t uParam0, const uint64_t uParam1) = 0;
 };
 
 struct IEMTThread;
@@ -44,9 +42,7 @@ public:
 	void * alloc(const uint32_t uLen);
 	void free(void * pMem);
 
-	void send(void * pMem);
-	void call(void * pMem, const uint32_t uContext);
-	void result(void * pMem, const uint32_t uContext);
+	void send(void * pMem, const uint64_t uParam0, const uint64_t uParam1);
 
 protected:
 	explicit EMTIPC(EMTIPCPrivate & dd, IEMTThread * pThread, IEMTShareMemory * pShareMemory, IEMTIPCSink * pSink);

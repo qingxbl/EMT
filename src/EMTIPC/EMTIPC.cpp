@@ -2,7 +2,6 @@
 
 #include "EMTIPCPrivate.h"
 
-#include <EMTUtil/EMTExtend.h>
 #include <EMTUtil/EMTThread.h>
 #include <EMTUtil/EMTShareMemory.h>
 
@@ -47,21 +46,7 @@ void EMTIPCPrivate::disconnected(EMTIPCPrivate * pThis)
 
 void EMTIPCPrivate::received(EMTIPCPrivate * pThis, void * pMem, const uint64_t uParam0, const uint64_t uParam1)
 {
-	uint32_t context;
-	switch (EMTExtend_received(&pThis->mCore, pMem, uParam0, uParam1, &context))
-	{
-	case kEMTExtendSend:
-		pThis->mSink->received(pMem);
-		break;
-	case kEMTExtendCall:
-		pThis->mSink->called(pMem, context);
-		break;
-	case kEMTExtendResult:
-		pThis->mSink->resulted(pMem, context);
-		break;
-	default:
-		break;
-	}
+	pThis->mSink->received(pMem, uParam0, uParam1);
 }
 
 void * EMTIPCPrivate::getShareMemory(EMTIPCPrivate * pThis, uint32_t uLen)
@@ -179,20 +164,8 @@ void EMTIPC::free(void * pMem)
 	return EMTCore_free(&d->mCore, pMem);
 }
 
-void EMTIPC::send(void * pMem)
+void EMTIPC::send(void * pMem, const uint64_t uParam0, const uint64_t uParam1)
 {
 	EMT_D(EMTIPC);
-	EMTExtend_send(&d->mCore, pMem);
-}
-
-void EMTIPC::call(void * pMem, const uint32_t uContext)
-{
-	EMT_D(EMTIPC);
-	EMTExtend_call(&d->mCore, pMem, uContext);
-}
-
-void EMTIPC::result(void * pMem, const uint32_t uContext)
-{
-	EMT_D(EMTIPC);
-	EMTExtend_result(&d->mCore, pMem, uContext);
+	EMTCore_send(&d->mCore, pMem, uParam0, uParam1);
 }

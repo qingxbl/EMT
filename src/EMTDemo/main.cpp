@@ -55,9 +55,7 @@ protected: // IEMTIPCSink
 	virtual void connected();
 	virtual void disconnected();
 
-	virtual void received(void * buf);
-	virtual void called(void * pMem, const uint32_t uContext);
-	virtual void resulted(void * pMem, const uint32_t uContext);
+	virtual void received(void * buf, const uint64_t uParam0, const uint64_t uParam1);
 
 private:
 	static void thread_entry(void * arg);
@@ -134,7 +132,7 @@ void IPCHandler::send(const uint32_t count/* = 1*/)
 
 		memcpy(buf, mInput, sizeof(mInput));
 
-		ipc->send(buf);
+		ipc->send(buf, 0, 0);
 	}
 }
 
@@ -152,7 +150,7 @@ void IPCHandler::disconnected()
 	thread()->exit();
 }
 
-void IPCHandler::received(void * buf)
+void IPCHandler::received(void * buf, const uint64_t uParam0, const uint64_t uParam1)
 {
 	//printf("[EMTIPC] %p received.\n", buf);
 	//printf("%s\n", (const char *)buf);
@@ -172,14 +170,6 @@ void IPCHandler::received(void * buf)
 	default:
 		send();
 	}
-}
-
-void IPCHandler::called(void * pMem, const uint32_t uContext)
-{
-}
-
-void IPCHandler::resulted(void * pMem, const uint32_t uContext)
-{
 }
 
 void IPCHandler::thread_entry(void * arg)
