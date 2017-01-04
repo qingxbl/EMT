@@ -1,5 +1,6 @@
 #include <EMTUtil/EMTThread.h>
 #include <EMTIPC/EMTIPCWin.h>
+#include <EMTUtil/EMTPool.h>
 
 #include <process.h>
 #include <windows.h>
@@ -308,9 +309,60 @@ static int test_pipe()
 	return thread->exec();
 }
 
+struct TestPoolContext
+{
+	HANDLE ev;
+	PEMTPOOL pool;
+};
+
+static void test_pool_entry(void * arg)
+{
+	TestPoolContext * ctx = (TestPoolContext *)arg;
+	::WaitForSingleObject(ctx->ev, INFINITE);
+
+	for (int i = 0; i < kTestCount; ++i)
+	{
+		//uint32_t * mem = (uint32_t *)EMTPool_alloc(ctx->pool, kTestBufferSize);
+		uint32_t * mem = (uint32_t *)malloc(kTestBufferSize);
+		*mem = 0;
+		//EMTPool_free(ctx->pool, mem);
+		free(mem);
+	}
+	::GetSystemTimePreciseAsFileTime(&s_end);
+}
+
+static int test_pool()
+{
+	EMTPOOL pool;
+	uint32_t metaLen, memLen;
+	EMTPool_calcMetaSize(1024 * 1024, kTestBufferSize, &metaLen, &memLen);
+	metaLen = (metaLen + (4096 - 1)) & ~(4096 - 1);
+	void * mem = malloc(metaLen + memLen);
+	memset(mem, 0, metaLen + memLen);
+	EMTPool_construct(&pool, 1, 1024 * 1024, kTestBufferSize, 1, mem, (uint8_t *)mem + metaLen);
+
+	TestPoolContext ctx = { ::CreateEvent(NULL, TRUE, FALSE, NULL), &pool };
+	HANDLE threads[4];
+	for (int i = 0; i < 4; ++i)
+	{
+		threads[i] = (HANDLE)_beginthread(test_pool_entry, 0, &ctx);
+	}
+
+	::Sleep(1000);
+	::GetSystemTimePreciseAsFileTime(&s_start);
+	::SetEvent(ctx.ev);
+
+	::WaitForMultipleObjects(4, threads, TRUE, INFINITE);
+
+	timeUsage("total: %llu\n", s_start, s_end);
+
+	return 0;
+}
+
 int main(int /*argc*/, char* /*argv*/[])
 {
-	return test_pipe();
+	//return test_pipe();
 	//return test_queue();
 	//return test_semaphore();
+	return test_pool();
 }

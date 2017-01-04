@@ -9,6 +9,11 @@
 
 BEGIN_NAMESPACE_ANONYMOUS
 
+enum
+{
+	kInvalidStartPoint = ~0U,
+};
+
 class EMTWorkThread : public IEMTThread
 {
 	EMTIMPL_IEMTUNKNOWN;
@@ -29,9 +34,6 @@ protected: // IEMTThread
 	virtual void delay(IEMTRunnable *runnable, const uint64_t time, const bool repeat);
 
 private:
-	void rebuildRegisteredHandles();
-
-private:
 	static void NTAPI queue_entry(ULONG_PTR Parameter);
 	static void	APIENTRY timer_entry(LPVOID lpArgToCompletionRoutine, DWORD dwTimerLowValue, DWORD dwTimerHighValue);
 
@@ -39,14 +41,16 @@ private:
 	DWORD mThreadId;
 	HANDLE mThread;
 
-	HANDLE mRegsiteredHandles[MAXIMUM_WAIT_OBJECTS];
 	std::vector<IEMTWaitable *> mRegisteredWaitable;
 
 	bool mRunning;
+	uint32_t mStartPoint;
 };
 
 EMTWorkThread::EMTWorkThread()
 	: mThreadId(::GetCurrentThreadId())
+	, mRunning(false)
+	, mStartPoint(0)
 {
 	::DuplicateHandle(::GetCurrentProcess(), ::GetCurrentThread(), ::GetCurrentProcess(), &mThread, 0, FALSE, DUPLICATE_SAME_ACCESS);
 
@@ -77,14 +81,24 @@ uint32_t EMTWorkThread::exec()
 
 	mRunning = true;
 
+	HANDLE waitHandles[MAXIMUM_WAIT_OBJECTS << 1];
+
 	while (mRunning)
 	{
 		const std::size_t count = mRegisteredWaitable.size();
-		const DWORD rc = MsgWaitForMultipleObjectsEx(count, mRegsiteredHandles, INFINITE, QS_ALLEVENTS, MWMO_ALERTABLE);
-		if (rc >= WAIT_OBJECT_0 && rc < mRegisteredWaitable.size())
+
+		if (mStartPoint == kInvalidStartPoint)
 		{
-			const DWORD wakeup = rc - WAIT_OBJECT_0;
-			IEMTWaitable * waitable = mRegisteredWaitable[wakeup];
+			std::transform(mRegisteredWaitable.cbegin(), mRegisteredWaitable.cend(), waitHandles, [](IEMTWaitable *c) -> HANDLE { return c->waitHandle(); });
+			std::copy(waitHandles, waitHandles + count, waitHandles + count);
+			mStartPoint = 0;
+		}
+
+		const DWORD rc = MsgWaitForMultipleObjectsEx(count, waitHandles + mStartPoint, INFINITE, QS_ALLEVENTS, MWMO_ALERTABLE);
+		const DWORD wokenObject = rc - WAIT_OBJECT_0;
+		if (wokenObject >= 0 && wokenObject < count)
+		{
+			IEMTWaitable * waitable = mRegisteredWaitable[(wokenObject + mStartPoint) % count];
 			waitable->run();
 
 			if (waitable->isAutoDestroy())
@@ -92,16 +106,11 @@ uint32_t EMTWorkThread::exec()
 				unregisterWaitable(waitable);
 				waitable->destruct();
 			}
-			else if (std::find(mRegisteredWaitable.cbegin(), mRegisteredWaitable.cend(), waitable) != mRegisteredWaitable.cend())
-			{
-				PHANDLE handleWakeup = mRegsiteredHandles + wakeup;
-				PHANDLE handleEnd = mRegsiteredHandles + mRegisteredWaitable.size();
-				*handleWakeup = INVALID_HANDLE_VALUE;
-				std::remove(handleWakeup, handleEnd, INVALID_HANDLE_VALUE);
-				*(handleEnd - 1) = waitable->waitHandle();
-			}
+
+			if (mStartPoint != kInvalidStartPoint)
+				mStartPoint = wokenObject + 1;
 		}
-		else if (rc == WAIT_OBJECT_0 + count)
+		else if (wokenObject == count)
 		{
 			MSG msg;
 			while (::PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
@@ -112,7 +121,7 @@ uint32_t EMTWorkThread::exec()
 		}
 		else if (rc == WAIT_IO_COMPLETION)
 		{
-			continue;
+			// continue;
 		}
 		else if (rc == WAIT_FAILED)
 		{
@@ -143,7 +152,7 @@ void EMTWorkThread::registerWaitable(IEMTWaitable * waitable)
 	if (std::find(mRegisteredWaitable.cbegin(), mRegisteredWaitable.cend(), waitable) == mRegisteredWaitable.cend())
 	{
 		mRegisteredWaitable.push_back(waitable);
-		rebuildRegisteredHandles();
+		mStartPoint = kInvalidStartPoint;
 	}
 }
 
@@ -153,7 +162,7 @@ void EMTWorkThread::unregisterWaitable(IEMTWaitable * waitable)
 		return queue(createEMTRunnable(std::bind(&EMTWorkThread::unregisterWaitable, this, waitable)));
 
 	mRegisteredWaitable.erase(std::remove_if(mRegisteredWaitable.begin(), mRegisteredWaitable.end(), [waitable](IEMTWaitable *c) { return c == waitable; }), mRegisteredWaitable.end());
-	rebuildRegisteredHandles();
+	mStartPoint = kInvalidStartPoint;
 }
 
 void EMTWorkThread::queue(IEMTRunnable * runnable)
@@ -164,12 +173,6 @@ void EMTWorkThread::queue(IEMTRunnable * runnable)
 void EMTWorkThread::delay(IEMTRunnable * runnable, const uint64_t time, const bool repeat)
 {
 
-}
-
-void EMTWorkThread::rebuildRegisteredHandles()
-{
-	std::transform(mRegisteredWaitable.cbegin(), mRegisteredWaitable.cend(), mRegsiteredHandles, [](IEMTWaitable *c) -> HANDLE { return c->waitHandle(); });
-	std::fill(mRegsiteredHandles + mRegisteredWaitable.size(), mRegsiteredHandles + MAXIMUM_WAIT_OBJECTS, nullptr);
 }
 
 void EMTWorkThread::queue_entry(ULONG_PTR Parameter)
