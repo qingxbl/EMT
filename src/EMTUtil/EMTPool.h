@@ -81,7 +81,7 @@ EMTIMPL_CALL void * EMTPool_take(PEMTPOOL pThis, const uint32_t uToken);
 #define EMTPool_take emtPool()->take
 #endif
 
-EXTERN_C void * rt_memset(void *mem, const int val, const uint32_t size);
-EXTERN_C uint32_t rt_cmpXchg32(volatile uint32_t *dest, uint32_t exchg, uint32_t comp);
+EXTERN_C void * rt_memset(void * mem, const int val, const uint32_t size);
+EXTERN_C uint32_t rt_cmpXchg32(volatile uint32_t * dest, uint32_t exchg, uint32_t comp);
 
 #endif // __EMTPOOL_H__

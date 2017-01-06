@@ -361,8 +361,8 @@ static int test_pool()
 
 int main(int /*argc*/, char* /*argv*/[])
 {
-	//return test_pipe();
+	return test_pipe();
 	//return test_queue();
 	//return test_semaphore();
-	return test_pool();
+	//return test_pool();
 }

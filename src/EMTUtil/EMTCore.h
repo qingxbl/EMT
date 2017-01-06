@@ -34,6 +34,8 @@ struct _EMTCOREOPS
 
 	void * (*alloc)(PEMTCORE pThis, const uint32_t uLen);
 	void (*free)(PEMTCORE pThis, void * pMem);
+	uint32_t (*length)(PEMTCORE pThis, void * pMem);
+
 
 	void (*send)(PEMTCORE pThis, void * pMem, const uint64_t uParam0, const uint64_t uParam1);
 
@@ -80,6 +82,9 @@ struct _EMTCORE
 	void * pMem;
 	void * pMemEnd;
 
+	PEMTCOREBLOCKMETA pInHead;
+	PEMTCOREBLOCKMETA pInTail;
+
 	EMTMULTIPOOL sMultiPool;
 	EMTMULTIPOOLCONFIG sMultiPoolConfig[3];
 };
@@ -95,12 +100,10 @@ EMTIMPL_CALL uint32_t EMTCore_connect(PEMTCORE pThis, uint32_t uConnId, const ui
 EMTIMPL_CALL uint32_t EMTCore_disconnect(PEMTCORE pThis);
 EMTIMPL_CALL void * EMTCore_alloc(PEMTCORE pThis, const uint32_t uLen);
 EMTIMPL_CALL void EMTCore_free(PEMTCORE pThis, void * pMem);
+EMTIMPL_CALL uint32_t EMTCore_length(PEMTCORE pThis, void * pMem);
 EMTIMPL_CALL void EMTCore_send(PEMTCORE pThis, void * pMem, const uint64_t uParam0, const uint64_t uParam1);
 EMTIMPL_CALL void EMTCore_notified(PEMTCORE pThis);
 EMTIMPL_CALL void EMTCore_queued(PEMTCORE pThis, void * pMem);
-EMTIMPL_CALL void EMTCore_connected(PEMTCORE pThis, PEMTCOREBLOCKMETA pBlockMeta);
-EMTIMPL_CALL void EMTCore_disconnected(PEMTCORE pThis, PEMTCOREBLOCKMETA pBlockMeta);
-EMTIMPL_CALL void EMTCore_received(PEMTCORE pThis, PEMTCOREBLOCKMETA pBlockMeta);
 #else
 #define EMTCore_construct emtCore()->construct
 #define EMTCore_destruct emtCore()->destruct
@@ -110,12 +113,12 @@ EMTIMPL_CALL void EMTCore_received(PEMTCORE pThis, PEMTCOREBLOCKMETA pBlockMeta)
 #define EMTCore_disconnect emtCore()->disconnect
 #define EMTCore_alloc emtCore()->alloc
 #define EMTCore_free emtCore()->free
+#define EMTCore_length emtCore()->length
 #define EMTCore_send emtCore()->send
 #define EMTCore_notified emtCore()->notified
 #define EMTCore_queued emtCore()->queued
-#define EMTCore_connected emtCore()->connected
-#define EMTCore_disconnected emtCore()->disconnected
-#define EMTCore_received emtCore()->received
 #endif
+
+EXTERN_C void * rt_memcpy(void * dst, const void * src, const uint32_t size);
 
 #endif // __EMTCORE_H__

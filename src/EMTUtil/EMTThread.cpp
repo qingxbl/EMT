@@ -90,7 +90,7 @@ uint32_t EMTWorkThread::exec()
 		if (mStartPoint == kInvalidStartPoint)
 		{
 			std::transform(mRegisteredWaitable.cbegin(), mRegisteredWaitable.cend(), waitHandles, [](IEMTWaitable *c) -> HANDLE { return c->waitHandle(); });
-			std::copy(waitHandles, waitHandles + count, waitHandles + count);
+			memcpy(waitHandles + count, waitHandles, sizeof(HANDLE) * count);
 			mStartPoint = 0;
 		}
 
