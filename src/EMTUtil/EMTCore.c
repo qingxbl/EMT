@@ -262,24 +262,20 @@ static uint32_t EMTCore_receivedPartialData(PEMTCORE pThis, PEMTCOREBLOCKMETA pB
 
 static uint32_t EMTCore_receivedPartial(PEMTCORE pThis, PEMTCOREBLOCKMETA pBlockMeta)
 {
-	if (pThis->pInTail == 0)
-		EMTCore_pend(pThis, pBlockMeta);
+	PEMTCOREPARTIALMETA partialMeta = (PEMTCOREPARTIALMETA)EMTMultiPool_take(&pThis->sMultiPool, pBlockMeta->uToken);
 
-	if (pBlockMeta->uToken == pThis->pInHead->uToken)
+	if (partialMeta->uStart == partialMeta->uEnd)
 	{
-		PEMTCOREPARTIALMETA partialMeta = (PEMTCOREPARTIALMETA)EMTMultiPool_take(&pThis->sMultiPool, pBlockMeta->uToken);
-		if (partialMeta->pReceive == 0)
-			return EMTCore_receivedPartialStart(pThis, pBlockMeta, partialMeta);
-		else if (partialMeta->uStart != partialMeta->uEnd)
-			return EMTCore_receivedPartialData(pThis, pBlockMeta, partialMeta);
-		else
-			return EMTCore_sendPartialData(pThis, pBlockMeta, partialMeta);
+		return EMTCore_sendPartialData(pThis, pBlockMeta, partialMeta);
 	}
-	else
+
+	if (partialMeta->pReceive == 0)
 	{
 		EMTCore_pend(pThis, pBlockMeta);
-		return 0;
+		return EMTCore_receivedPartialStart(pThis, pBlockMeta, partialMeta);
 	}
+
+	return EMTCore_receivedPartialData(pThis, pBlockMeta, partialMeta);
 }
 
 static uint32_t EMTCore_process(PEMTCORE pThis, PEMTCOREBLOCKMETA pBlockMeta)

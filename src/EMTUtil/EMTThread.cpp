@@ -35,7 +35,9 @@ protected: // IEMTThread
 
 private:
 	static void NTAPI queue_entry(ULONG_PTR Parameter);
-	static void	APIENTRY timer_entry(LPVOID lpArgToCompletionRoutine, DWORD dwTimerLowValue, DWORD dwTimerHighValue);
+	static void APIENTRY timer_entry(LPVOID lpArgToCompletionRoutine, DWORD dwTimerLowValue, DWORD dwTimerHighValue);
+
+	static bool run(IEMTRunnable * runnable);
 
 private:
 	DWORD mThreadId;
@@ -99,13 +101,8 @@ uint32_t EMTWorkThread::exec()
 		if (wokenObject >= 0 && wokenObject < count)
 		{
 			IEMTWaitable * waitable = mRegisteredWaitable[(wokenObject + mStartPoint) % count];
-			waitable->run();
-
-			if (waitable->isAutoDestroy())
-			{
+			if (run(waitable))
 				unregisterWaitable(waitable);
-				waitable->destruct();
-			}
 
 			if (mStartPoint != kInvalidStartPoint)
 				mStartPoint = wokenObject + 1;
@@ -177,16 +174,23 @@ void EMTWorkThread::delay(IEMTRunnable * runnable, const uint64_t time, const bo
 
 void EMTWorkThread::queue_entry(ULONG_PTR Parameter)
 {
-	IEMTRunnable * runnable = (IEMTRunnable *)Parameter;
-	runnable->run();
-
-	if (runnable->isAutoDestroy())
-		runnable->destruct();
+	run((IEMTRunnable *)Parameter);
 }
 
 void EMTWorkThread::timer_entry(LPVOID lpArgToCompletionRoutine, DWORD dwTimerLowValue, DWORD dwTimerHighValue)
 {
 
+}
+
+bool EMTWorkThread::run(IEMTRunnable * runnable)
+{
+	runnable->run();
+
+	const bool ret = runnable->isAutoDestroy();
+	if (ret)
+		runnable->destruct();
+
+	return ret;
 }
 
 END_NAMESPACE_ANONYMOUS
