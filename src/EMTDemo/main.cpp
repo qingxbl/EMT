@@ -10,9 +10,9 @@
 enum
 {
 	kTestCount = 1000000,
-	kTestBufferSize = 512,
+	kTestBufferSize = 512 * 1024,
 	//kTestSendConcurrent = 2 * 1024 * 64,
-	kTestSendConcurrent = 1000,
+	kTestSendConcurrent = 1,
 };
 
 static void timeUsage(const char *fmt, const FILETIME &start, const FILETIME &end)
@@ -77,7 +77,7 @@ private:
 	FILETIME mTimeSendStart;
 	FILETIME mTimeSendEnd;
 
-	uint8_t mInput[kTestBufferSize];
+	//uint8_t mInput[kTestBufferSize];
 };
 
 IPCHandler::IPCHandler(const wchar_t * name, const std::weak_ptr<IEMTThread> & thread)
@@ -90,7 +90,7 @@ IPCHandler::IPCHandler(const wchar_t * name, const std::weak_ptr<IEMTThread> & t
 	, mSentCount(0)
 {
 	mHandleThread = (HANDLE)_beginthread(thread_entry, 0, this);
-	memset(mInput, 0xCC, kTestBufferSize);
+	//memset(mInput, 0xCC, kTestBufferSize);
 }
 
 IPCHandler::~IPCHandler()
@@ -131,7 +131,7 @@ void IPCHandler::send(const uint32_t count/* = 1*/)
 
 		char * buf = (char *)ipc->alloc(kTestBufferSize);
 
-		memcpy(buf, mInput, sizeof(mInput));
+		//memcpy(buf, mInput, sizeof(mInput));
 
 		ipc->send(buf, 0, 0);
 	}
@@ -159,15 +159,14 @@ void IPCHandler::received(void * buf, const uint64_t uParam0, const uint64_t uPa
 	IPC()->free(buf);
 	switch (++mReceivedCount)
 	{
-	case 1:
-		::GetSystemTimePreciseAsFileTime(&mTimeReceiveStart);
-		break;
 	case kTestCount:
 		::GetSystemTimePreciseAsFileTime(&mTimeReceiveEnd);
 		timeUsage("Received %llu\n", mTimeReceiveStart, mTimeReceiveEnd);
 		if (mSendCount == kTestCount)
 			IPC()->disconnect();
 		break;
+	case 1:
+		::GetSystemTimePreciseAsFileTime(&mTimeReceiveStart);
 	default:
 		send();
 	}

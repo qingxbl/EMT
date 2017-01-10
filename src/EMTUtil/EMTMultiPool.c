@@ -163,7 +163,7 @@ const uint32_t EMTMultiPool_transfer(PEMTMULTIPOOL pThis, void * pMem, const uin
 
 	if (poolConfig)
 	{
-		const uint32_t poolId = (poolConfig - EMTMultiPool_poolConfig(pThis, 0)) << kEMTMultiPoolPoolIdShift;
+		const uint32_t poolId = (uint32_t)((poolConfig - EMTMultiPool_poolConfig(pThis, 0)) << kEMTMultiPoolPoolIdShift);
 		const uint32_t token = EMTPool_transfer(&poolConfig->sPool, pMem, uToId) & kEMTMultiPoolTokenMask;
 
 		return poolId | token;

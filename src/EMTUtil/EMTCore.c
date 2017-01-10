@@ -32,9 +32,9 @@ struct _EMTCOREPARTIALMETA
 	uint64_t pReceive;
 
 	uint32_t uStart;
-	uint32_t uEnd;
 
-	uint32_t uToken[2];
+	uint32_t uTokenCount;
+	uint32_t uToken[10];
 };
 #pragma pack(pop)
 
@@ -53,10 +53,10 @@ enum
 	kEMTCoreFlagConnect = 1,
 
 	kEMTCoreLargestBlockLength = 1024 * 256,
-	kEMTCoreLargestBlockCount = 8,
-	kEMTCoreLargestBlockLimit = 4,
+	kEMTCoreLargestBlockCount = 4 * 8,
+	kEMTCoreLargestBlockLimit = 1,
 	KEMTCorePartialMemLength = kEMTCoreLargestBlockLength * kEMTCoreLargestBlockLimit,
-	kEMTCorePartialSlots = 2,
+	kEMTCorePartialSlots = 10,
 };
 
 typedef struct _EMTCOREMEMMETA EMTCOREMEMMETA, * PEMTCOREMEMMETA;
@@ -115,7 +115,7 @@ static uint32_t EMTCore_disconnected(PEMTCORE pThis, PEMTCOREBLOCKMETA pBlockMet
 	return 1;
 }
 
-static void EMTCore_pend(PEMTCORE pThis, PEMTCOREBLOCKMETA pBlockMeta)
+static uint32_t EMTCore_pend(PEMTCORE pThis, PEMTCOREBLOCKMETA pBlockMeta)
 {
 	if (pThis->pInTail == 0)
 	{
@@ -123,11 +123,13 @@ static void EMTCore_pend(PEMTCORE pThis, PEMTCOREBLOCKMETA pBlockMeta)
 		pThis->pInTail = pBlockMeta;
 		EMTLinkList_init(&pBlockMeta->sNext);
 	}
-	else
+	else if (pThis->pInHead != pBlockMeta)
 	{
 		EMTLinkList_prepend(&pThis->pInTail->sNext, &pBlockMeta->sNext);
 		pThis->pInTail = pBlockMeta;
 	}
+
+	return pThis->pInHead == pBlockMeta ? 1 : 0;
 }
 
 static void EMTCore_popPended(PEMTCORE pThis)
@@ -170,17 +172,16 @@ static void EMTCore_sendPartialStart(PEMTCORE pThis, void * pMem, const uint64_t
 	PEMTCOREPARTIALMETA partialMeta = EMTMultiPool_alloc(&pThis->sMultiPool, sizeof(EMTCOREPARTIALMETA));
 	partialMeta->pSend = (uintptr_t)pMem;
 	partialMeta->pReceive = 0;
-	partialMeta->uStart = 0;
-	partialMeta->uEnd = EMTCore_length(pThis, pMem);
+	partialMeta->uStart = EMTCore_length(pThis, pMem);
+	partialMeta->uTokenCount = 0;
 
 	EMTCore_transfer(pThis, partialMeta, kEMTCorePartial, uParam0, uParam1, 1);
 }
 
 static uint32_t EMTCore_receivedPartialStart(PEMTCORE pThis, PEMTCOREBLOCKMETA pBlockMeta, PEMTCOREPARTIALMETA pPartialMeta)
 {
-	pPartialMeta->pReceive = (uintptr_t)EMTCore_allocSys(pThis, pPartialMeta->uEnd);
+	pPartialMeta->pReceive = (uintptr_t)EMTCore_allocSys(pThis, pPartialMeta->uStart);
 	pPartialMeta->uStart = 0;
-	pPartialMeta->uEnd = 0;
 
 	EMTCore_transfer(pThis, pPartialMeta, kEMTCorePartial, 0, 0, 1);
 	return 0;
@@ -188,39 +189,33 @@ static uint32_t EMTCore_receivedPartialStart(PEMTCORE pThis, PEMTCOREBLOCKMETA p
 
 static uint32_t EMTCore_sendPartialData(PEMTCORE pThis, PEMTCOREBLOCKMETA pBlockMeta, PEMTCOREPARTIALMETA pPartialMeta)
 {
-	uint32_t i;
 	void * mem = (void *)pPartialMeta->pSend;
 	const uint32_t memLength = EMTCore_length(pThis, mem);
+	uint32_t start = pPartialMeta->uStart;
 
-	for (i = 0; i < kEMTCorePartialSlots && pPartialMeta->uEnd < memLength; ++i)
+	for (pPartialMeta->uTokenCount = 0; pPartialMeta->uTokenCount < kEMTCorePartialSlots && start < memLength; ++pPartialMeta->uTokenCount)
 	{
-		const uint32_t memSendLength = memLength - pPartialMeta->uEnd > KEMTCorePartialMemLength ? KEMTCorePartialMemLength : memLength - pPartialMeta->uEnd;
-		void * memSend = EMTMultiPool_alloc(&pThis->sMultiPool, KEMTCorePartialMemLength);
+		const uint32_t memRemain = memLength - start;
+		const uint32_t memSendLength = memRemain > KEMTCorePartialMemLength ? KEMTCorePartialMemLength : memRemain;
+		void * memSend = EMTMultiPool_alloc(&pThis->sMultiPool, memSendLength);
 
 		if (memSend == 0)
 			break;
 
-		rt_memcpy(memSend, (uint8_t *)mem + pPartialMeta->uEnd, memSendLength);
-		pPartialMeta->uEnd += memSendLength;
-		pPartialMeta->uToken[i] = EMTMultiPool_transfer(&pThis->sMultiPool, memSend, *pThis->pPeerIdR);
+		rt_memcpy(memSend, (uint8_t *)mem + start, memSendLength);
+		start += memSendLength;
+		pPartialMeta->uToken[pPartialMeta->uTokenCount] = EMTMultiPool_transfer(&pThis->sMultiPool, memSend, *pThis->pPeerIdR);
 	}
 
-	if (pPartialMeta->uEnd == memLength)
+	if (start == memLength)
 		EMTCore_free(pThis, mem);
 
-	if (i != 0)
-	{
-		if (i < kEMTCorePartialSlots)
-			rt_memset(pPartialMeta->uToken + i, 0, sizeof(uint32_t) * (kEMTCorePartialSlots - i));
-
+	if (pPartialMeta->uTokenCount != 0)
 		EMTCore_transfer(pThis, pPartialMeta, kEMTCorePartial, 0, 0, 1);
-	}
 	else
-	{
 		pThis->pSinkOps->queue(pThis->pSinkCtx, pBlockMeta);
-	}
 
-	return i;
+	return pPartialMeta->uTokenCount;
 }
 
 static uint32_t EMTCore_receivedPartialData(PEMTCORE pThis, PEMTCOREBLOCKMETA pBlockMeta, PEMTCOREPARTIALMETA pPartialMeta)
@@ -229,7 +224,7 @@ static uint32_t EMTCore_receivedPartialData(PEMTCORE pThis, PEMTCOREBLOCKMETA pB
 	void * mem = (void *)pPartialMeta->pReceive;
 	const uint32_t memLen = EMTCore_length(pThis, mem);
 
-	for (i = 0; i < kEMTCorePartialSlots && pPartialMeta->uToken[i] != 0; ++i)
+	for (i = 0; i < pPartialMeta->uTokenCount; ++i)
 	{
 		void * memReceive = EMTMultiPool_take(&pThis->sMultiPool, pPartialMeta->uToken[i]);
 		const uint32_t memReceiveLen = EMTMultiPool_length(&pThis->sMultiPool, memReceive);
@@ -240,8 +235,9 @@ static uint32_t EMTCore_receivedPartialData(PEMTCORE pThis, PEMTCOREBLOCKMETA pB
 		EMTMultiPool_free(&pThis->sMultiPool, memReceive);
 	}
 
-	if (pPartialMeta->uEnd != memLen)
+	if (pPartialMeta->uStart != memLen)
 	{
+		pPartialMeta->uTokenCount = 0;
 		EMTCore_transfer(pThis, pPartialMeta, kEMTCorePartial, 0, 0, 1);
 	}
 	else
@@ -264,18 +260,12 @@ static uint32_t EMTCore_receivedPartial(PEMTCORE pThis, PEMTCOREBLOCKMETA pBlock
 {
 	PEMTCOREPARTIALMETA partialMeta = (PEMTCOREPARTIALMETA)EMTMultiPool_take(&pThis->sMultiPool, pBlockMeta->uToken);
 
-	if (partialMeta->uStart == partialMeta->uEnd)
-	{
-		return EMTCore_sendPartialData(pThis, pBlockMeta, partialMeta);
-	}
-
 	if (partialMeta->pReceive == 0)
 	{
-		EMTCore_pend(pThis, pBlockMeta);
-		return EMTCore_receivedPartialStart(pThis, pBlockMeta, partialMeta);
+		return EMTCore_pend(pThis, pBlockMeta) ? EMTCore_receivedPartialStart(pThis, pBlockMeta, partialMeta) : 0;
 	}
 
-	return EMTCore_receivedPartialData(pThis, pBlockMeta, partialMeta);
+	return partialMeta->uTokenCount != 0 ? EMTCore_receivedPartialData(pThis, pBlockMeta, partialMeta) : EMTCore_sendPartialData(pThis, pBlockMeta, partialMeta);
 }
 
 static uint32_t EMTCore_process(PEMTCORE pThis, PEMTCOREBLOCKMETA pBlockMeta)

@@ -48,4 +48,47 @@ EMTIMPL_CALL PEMTLINKLISTNODE EMTLinkList_reverse(PEMTLINKLISTNODE node);
 #define EMTLinkList_reverse emtLinkList()->reverse
 #endif
 
+typedef struct _EMTLINKLISTOPS2 EMTLINKLISTOPS2, * PEMTLINKLISTOPS2;
+typedef const EMTLINKLISTOPS2 * PCEMTLINKLISTOPS2;
+typedef struct _EMTLINKLISTNODE2 EMTLINKLISTNODE2, * PEMTLINKLISTNODE2;
+
+struct _EMTLINKLISTOPS2
+{
+	void(*init)(PEMTLINKLISTNODE2 head);
+	void(*prepend)(PEMTLINKLISTNODE2 head, PEMTLINKLISTNODE2 node);
+
+	PEMTLINKLISTNODE2 (*next)(PEMTLINKLISTNODE2 node);
+
+	PEMTLINKLISTNODE2 (*takeFirst)(PEMTLINKLISTNODE2 head);
+	PEMTLINKLISTNODE2 (*detach)(PEMTLINKLISTNODE2 head);
+	PEMTLINKLISTNODE2 (*reverse)(PEMTLINKLISTNODE2 node);
+};
+
+#pragma pack(push, 1)
+struct _EMTLINKLISTNODE2
+{
+	volatile PEMTLINKLISTNODE2 next;
+};
+#pragma pack(pop)
+
+EXTERN_C PCEMTLINKLISTOPS2 emtLinkList2(void);
+
+#if !defined(USE_VTABLE) || defined(EMTIMPL_LINKLIST)
+EMTIMPL_CALL void EMTLinkList2_init(PEMTLINKLISTNODE2 head);
+EMTIMPL_CALL void EMTLinkList2_prepend(PEMTLINKLISTNODE2 head, PEMTLINKLISTNODE2 node);
+EMTIMPL_CALL PEMTLINKLISTNODE2 EMTLinkList2_next(PEMTLINKLISTNODE2 node);
+EMTIMPL_CALL PEMTLINKLISTNODE2 EMTLinkList2_takeFirst(PEMTLINKLISTNODE2 head);
+EMTIMPL_CALL PEMTLINKLISTNODE2 EMTLinkList2_detach(PEMTLINKLISTNODE2 head);
+EMTIMPL_CALL PEMTLINKLISTNODE2 EMTLinkList2_reverse(PEMTLINKLISTNODE2 node);
+#else
+#define EMTLinkList2_init emtLinkList2()->init
+#define EMTLinkList2_prepend emtLinkList2()->prepend
+#define EMTLinkList2_next emtLinkList2()->next
+#define EMTLinkList2_takeFirst emtLinkList2()->takeFirst
+#define EMTLinkList2_detach emtLinkList2()->detach
+#define EMTLinkList2_reverse emtLinkList2()->reverse
+#endif
+
+EXTERN_C void * rt_cmpXchgPtr(void * volatile * dest, void * exchg, void * comp);
+
 #endif // __EMTLINKLIST_H__

@@ -32,7 +32,7 @@ enum
 
 static const uint32_t EMTPool_blockFromAddress(PEMTPOOL pThis, void * pMem)
 {
-	return ((uint8_t *)pMem - (uint8_t *)pThis->pPool) / pThis->pMeta->uBlockLen;
+	return (uint32_t)(((uint8_t *)pMem - (uint8_t *)pThis->pPool) / pThis->pMeta->uBlockLen);
 }
 
 static int32_t EMTPool_validation(PEMTPOOL pThis, void * pMem)
@@ -125,7 +125,7 @@ void * EMTPool_alloc(PEMTPOOL pThis, const uint32_t uMemLen)
 	uint32_t uRound = 3;
 	while ((pBlockMeta == 0 || pBlockMeta->uLen < uBlocks) && uRound)
 	{
-		const uint32_t uBlockCurP = pBlockMeta ? pBlockMeta - pThis->pBlockMeta + pBlockMeta->uLen : pThis->pMeta->uNextBlock;
+		const uint32_t uBlockCurP = pBlockMeta ? (uint32_t)(pBlockMeta - pThis->pBlockMeta + pBlockMeta->uLen) : pThis->pMeta->uNextBlock;
 		const uint32_t uBlockCur = uBlockCurP < pThis->pMeta->uBlockCount ? uBlockCurP : 0;
 		PEMTPOOLBLOCKMETA pBlockMetaCur = pThis->pBlockMeta + uBlockCur;
 		const uint32_t uBlockNextP = uBlockCur + pBlockMetaCur->uLen;
