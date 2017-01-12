@@ -41,6 +41,10 @@ public:
 	uint32_t disconnect();
 	void * alloc(const uint32_t uLen);
 	void free(void * pMem);
+	uint32_t length(void * pMem);
+
+	uint32_t transfer(void * pMem);
+	void * take(const uint32_t uToken);
 
 	void send(void * pMem, const uint64_t uParam0, const uint64_t uParam1);
 

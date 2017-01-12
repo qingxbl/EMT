@@ -36,6 +36,8 @@ struct _EMTCOREOPS
 	void (*free)(PEMTCORE pThis, void * pMem);
 	uint32_t (*length)(PEMTCORE pThis, void * pMem);
 
+	uint32_t (*transfer)(PEMTCORE pThis, void * pMem);
+	void * (*take)(PEMTCORE pThis, const uint32_t uToken);
 
 	void (*send)(PEMTCORE pThis, void * pMem, const uint64_t uParam0, const uint64_t uParam1);
 
@@ -101,6 +103,8 @@ EMTIMPL_CALL uint32_t EMTCore_disconnect(PEMTCORE pThis);
 EMTIMPL_CALL void * EMTCore_alloc(PEMTCORE pThis, const uint32_t uLen);
 EMTIMPL_CALL void EMTCore_free(PEMTCORE pThis, void * pMem);
 EMTIMPL_CALL uint32_t EMTCore_length(PEMTCORE pThis, void * pMem);
+EMTIMPL_CALL uint32_t EMTCore_transfer(PEMTCORE pThis, void * pMem);
+EMTIMPL_CALL void * EMTCore_take(PEMTCORE pThis, const uint32_t uToken);
 EMTIMPL_CALL void EMTCore_send(PEMTCORE pThis, void * pMem, const uint64_t uParam0, const uint64_t uParam1);
 EMTIMPL_CALL void EMTCore_notified(PEMTCORE pThis);
 EMTIMPL_CALL void EMTCore_queued(PEMTCORE pThis, void * pMem);
@@ -114,6 +118,8 @@ EMTIMPL_CALL void EMTCore_queued(PEMTCORE pThis, void * pMem);
 #define EMTCore_alloc emtCore()->alloc
 #define EMTCore_free emtCore()->free
 #define EMTCore_length emtCore()->length
+#define EMTCore_transfer emtCore()->transfer
+#define EMTCore_take emtCore()->take
 #define EMTCore_send emtCore()->send
 #define EMTCore_notified emtCore()->notified
 #define EMTCore_queued emtCore()->queued

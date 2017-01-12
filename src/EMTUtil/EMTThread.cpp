@@ -192,9 +192,7 @@ void EMTWorkThread::unregisterWaitable(IEMTWaitable * waitable)
 
 void EMTWorkThread::queue(IEMTRunnable * runnable)
 {
-	EMTLINKLISTNODE2 * nextNode = EMTLinkList2_next(&mQueued);
-	EMTLinkList2_prepend(&mQueued, &(new QueuedItem(runnable))->node);
-	if (nextNode == NULL)
+	if (EMTLinkList2_prepend(&mQueued, &(new QueuedItem(runnable))->node) == NULL)
 		::SetEvent(mQueuedEvent);
 }
 

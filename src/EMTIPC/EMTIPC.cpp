@@ -164,6 +164,24 @@ void EMTIPC::free(void * pMem)
 	return EMTCore_free(&d->mCore, pMem);
 }
 
+uint32_t EMTIPC::length(void * pMem)
+{
+	EMT_D(EMTIPC);
+	return EMTCore_length(&d->mCore, pMem);
+}
+
+uint32_t EMTIPC::transfer(void * pMem)
+{
+	EMT_D(EMTIPC);
+	return EMTCore_transfer(&d->mCore, pMem);
+}
+
+void * EMTIPC::take(const uint32_t uToken)
+{
+	EMT_D(EMTIPC);
+	return EMTCore_take(&d->mCore, uToken);
+}
+
 void EMTIPC::send(void * pMem, const uint64_t uParam0, const uint64_t uParam1)
 {
 	EMT_D(EMTIPC);

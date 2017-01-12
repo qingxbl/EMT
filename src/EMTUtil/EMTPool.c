@@ -120,7 +120,7 @@ const uint32_t EMTPool_length(PEMTPOOL pThis, void * pMem)
 
 void * EMTPool_alloc(PEMTPOOL pThis, const uint32_t uMemLen)
 {
-	const uint32_t uBlocks = (uMemLen + pThis->pMeta->uBlockLen - 1) / pThis->pMeta->uBlockLen;
+	const uint32_t uBlocks = uMemLen ? (uMemLen + pThis->pMeta->uBlockLen - 1) / pThis->pMeta->uBlockLen : 1;
 	PEMTPOOLBLOCKMETA pBlockMeta = 0;
 	uint32_t uRound = 3;
 	while ((pBlockMeta == 0 || pBlockMeta->uLen < uBlocks) && uRound)

@@ -132,7 +132,7 @@ EMTIPCWinPrivate::~EMTIPCWinPrivate()
 void EMTIPCWinPrivate::init(const wchar_t * pName)
 {
 	mName = _wcsdup(pName);
-	mEventL = ::CreateEventW(NULL, TRUE, FALSE, NULL);
+	mEventL = ::CreateEventW(NULL, FALSE, FALSE, NULL);
 	mEventR = INVALID_HANDLE_VALUE;
 
 	mEventLWaitable.reset(createEMTWaitable(std::bind(&EMTIPCWinPrivate::sys_notified, this), mEventL));
@@ -151,8 +151,6 @@ const wchar_t * EMTIPCWinPrivate::name() const
 
 void EMTIPCWinPrivate::sys_notified()
 {
-	::ResetEvent(mEventL);
-
 	notified();
 }
 

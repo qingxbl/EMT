@@ -17,7 +17,7 @@ void EMTLinkList_init(PEMTLINKLISTNODE head)
 	head->next = 0;
 }
 
-void EMTLinkList_prepend(PEMTLINKLISTNODE head, PEMTLINKLISTNODE node)
+PEMTLINKLISTNODE EMTLinkList_prepend(PEMTLINKLISTNODE head, PEMTLINKLISTNODE node)
 {
 	int32_t headNext;
 	const int32_t offset = nodeToOffset(head, node);
@@ -26,6 +26,8 @@ void EMTLinkList_prepend(PEMTLINKLISTNODE head, PEMTLINKLISTNODE node)
 		headNext = head->next;
 		node->next = headNext ? headNext - offset: 0;
 	} while (rt_cmpXchg32(&head->next, offset, headNext) != headNext);
+
+	return headNext ? offsetToNode(head, headNext) : 0;
 }
 
 PEMTLINKLISTNODE EMTLinkList_next(PEMTLINKLISTNODE node)
@@ -105,12 +107,16 @@ void EMTLinkList2_init(PEMTLINKLISTNODE2 head)
 	head->next = 0;
 }
 
-void EMTLinkList2_prepend(PEMTLINKLISTNODE2 head, PEMTLINKLISTNODE2 node)
+PEMTLINKLISTNODE2 EMTLinkList2_prepend(PEMTLINKLISTNODE2 head, PEMTLINKLISTNODE2 node)
 {
+	PEMTLINKLISTNODE2 headNext;
 	do
 	{
-		node->next = head->next;
-	} while (rt_cmpXchgPtr(&head->next, node, node->next) != node->next);
+		headNext = head->next;
+		node->next = headNext;
+	} while (rt_cmpXchgPtr(&head->next, node, headNext) != headNext);
+
+	return headNext;
 }
 
 PEMTLINKLISTNODE2 EMTLinkList2_next(PEMTLINKLISTNODE2 node)
