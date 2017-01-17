@@ -69,16 +69,6 @@ void EMTIPCPrivate::queue(EMTIPCPrivate * pThis, void * pMem)
 	pThis->mThread->queue(createEMTRunnable(std::bind(EMTCore_queued, &pThis->mCore, pMem)));
 }
 
-void * EMTIPCPrivate::allocSys(EMTIPCPrivate * pThis, const uint32_t uLen)
-{
-	return ::malloc(uLen);
-}
-
-void EMTIPCPrivate::freeSys(EMTIPCPrivate * pThis, void * pMem)
-{
-	::free(pMem);
-}
-
 PEMTCORESINKOPS EMTIPCPrivate::emtCoreSink()
 {
 	static EMTCORESINKOPS sOps =

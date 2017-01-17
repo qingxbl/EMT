@@ -233,7 +233,13 @@ bool EMTPipe::connect(const wchar_t * name)
 			&mode,    // new pipe mode 
 			NULL,     // don't set maximum bytes 
 			NULL);    // don't set maximum time 
-		if (!success)
+		if (success == FALSE)
+		{
+			mode = PIPE_WAIT;
+			success = SetNamedPipeHandleState(mPipe, &mode, NULL, NULL);
+		}
+
+		if (success == FALSE)
 			break;
 
 		mStatus = kEMTPipeConnecting;

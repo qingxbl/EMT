@@ -93,7 +93,7 @@ static void EMTCore_sendAll(PEMTCORE pThis, void * pMem, const uint64_t uFlags, 
 
 static void * EMTCore_allocSys(PEMTCORE pThis, const uint32_t uLen)
 {
-	PEMTCOREMEMMETA memMeta = (PEMTCOREMEMMETA)pThis->pSinkOps->allocSys(pThis->pSinkCtx, uLen);
+	PEMTCOREMEMMETA memMeta = (PEMTCOREMEMMETA)pThis->pSinkOps->allocSys(pThis->pSinkCtx, uLen + sizeof(EMTCOREMEMMETA));
 	memMeta->uLen = uLen;
 	return memMeta + 1;
 }

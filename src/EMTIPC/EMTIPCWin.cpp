@@ -154,6 +154,16 @@ void EMTIPCWinPrivate::sys_notified()
 	notified();
 }
 
+void * EMTIPCPrivate::allocSys(EMTIPCPrivate * pThis, const uint32_t uLen)
+{
+	return ::malloc(uLen);
+}
+
+void EMTIPCPrivate::freeSys(EMTIPCPrivate * pThis, void * pMem)
+{
+	::free(pMem);
+}
+
 uint32_t EMTIPCPrivate::sys_connect(uint32_t uConnId)
 {
 	EMTIPCWinPrivate * sys = (EMTIPCWinPrivate *)this;
