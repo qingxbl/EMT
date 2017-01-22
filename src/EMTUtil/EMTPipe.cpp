@@ -18,11 +18,11 @@ static void createEvent(PHANDLE h)
 
 static void closeHandle(PHANDLE h)
 {
-	if (*h == INVALID_HANDLE_VALUE)
+	HANDLE pH = InterlockedExchangePointer(h, INVALID_HANDLE_VALUE);
+	if (pH == INVALID_HANDLE_VALUE)
 		return;
 
-	::CloseHandle(*h);
-	*h = INVALID_HANDLE_VALUE;
+	::CloseHandle(pH);
 }
 
 template <class T>
