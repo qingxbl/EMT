@@ -318,6 +318,7 @@ bool EMTPipe::handleError(DWORD errorCode)
 		return true;
 	case ERROR_BROKEN_PIPE:
 	case ERROR_INVALID_HANDLE:
+	case ERROR_PIPE_NOT_CONNECTED:
 		disconnectWithNotify();
 		return false;
 	default:
