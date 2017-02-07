@@ -10,31 +10,73 @@
 
 #include <memory>
 
-struct DECLSPEC_NOVTABLE IEMTIPCWinPipeHandler : public IEMTPipeHandler
+#pragma pack(push, 1)
+struct EMTIPCWinPacket
 {
+	EMTIPCWinPacket(const uint16_t uri, const uint16_t len) : packet_uri(uri), packet_len(len) { }
+	uint16_t packet_uri;
+	uint16_t packet_len;
+};
+
+template <class T>
+struct EMTIPCWinPacketT : public EMTIPCWinPacket
+{
+	EMTIPCWinPacketT() : EMTIPCWinPacket(T::uri, sizeof(T)) { }
+};
+
+enum
+{
+	kEMTIPCWinPacketBegin = 0,
+	kEMTIPCWinPacket_Connect,
+	kEMTIPCWinPacket_ConnectACK,
+	kEMTIPCWinPacketEnd,
+};
+
+struct EMTIPCWinPacket_Connect : public EMTIPCWinPacketT<EMTIPCWinPacket_Connect>
+{
+	enum { uri = kEMTIPCWinPacket_Connect };
+
+	uint32_t connId;
+	uint32_t processId;
+	uint64_t eventHandle;
+};
+
+struct EMTIPCWinPacket_ConnectACK : public EMTIPCWinPacketT<EMTIPCWinPacket_ConnectACK>
+{
+	enum { uri = kEMTIPCWinPacket_ConnectACK };
+
+	uint64_t eventHandle;
+};
+#pragma pack(pop)
+
+struct DECLSPEC_NOVTABLE IEMTIPCWinPipe
+{
+	virtual ~IEMTIPCWinPipe() { }
 	virtual bool connect() = 0;
 	virtual void disconnect() = 0;
+	virtual void send(void * buf, const uint32_t len) = 0;
 };
 
 template <bool SERVER>
-class EMTIPCWinPipeHandler : public IEMTIPCWinPipeHandler
+class EMTIPCWinPipe : public IEMTIPCWinPipe, public IEMTPipeHandler
 {
 	EMTIMPL_IEMTUNKNOWN;
 
 public:
-	explicit EMTIPCWinPipeHandler(EMTIPCWinPrivate * pHost);
-	virtual ~EMTIPCWinPipeHandler() { }
+	explicit EMTIPCWinPipe(EMTIPCWinPrivate * pHost);
+	virtual ~EMTIPCWinPipe() { }
 
 protected: // IEMTPipeHandler
 	virtual void connected() { }
 	virtual void disconnected();
 
-	virtual void received(void * buf, const uint32_t len) { }
-	virtual void sent(void * buf, const uint32_t len) { }
+	virtual void received(void * buf, const uint32_t len);
+	virtual void sent(void * buf, const uint32_t len);
 
-protected: // IEMTIPCWinPipeHandler
+protected: // IEMTIPCWinPipe
 	virtual bool connect();
 	virtual void disconnect();
+	virtual void send(void * buf, const uint32_t len);
 
 private:
 	bool connect(const wchar_t * pName);
@@ -55,6 +97,11 @@ public:
 	EMTIPCWin * q() const;
 	const wchar_t * name() const;
 
+	void connect();
+	void disconnect();
+
+	void received(void * buf, const uint32_t len);
+
 private:
 	void sys_notified();
 
@@ -65,39 +112,44 @@ protected:
 	wchar_t * mName;
 
 	std::unique_ptr<IEMTWaitable, IEMTUnknown_Delete> mEventLWaitable;
-	std::unique_ptr<IEMTIPCWinPipeHandler, IEMTUnknown_Delete> mPipeHandler;
+	std::unique_ptr<IEMTIPCWinPipe> mPipe;
 
 	HANDLE mEventL;
 	HANDLE mEventR;
 };
 
 template <bool SERVER>
-EMTIPCWinPipeHandler<SERVER>::EMTIPCWinPipeHandler(EMTIPCWinPrivate * pHost)
+EMTIPCWinPipe<SERVER>::EMTIPCWinPipe(EMTIPCWinPrivate * pHost)
 	: mPipe(createEMTPipe(pHost->q()->thread(), this))
 	, mHost(pHost)
 {
 }
 
 template<bool SERVER>
-void EMTIPCWinPipeHandler<SERVER>::disconnected()
+void EMTIPCWinPipe<SERVER>::disconnected()
 {
-	mHost->q()->EMTIPC::disconnect();
+	mHost->disconnect();
 }
 
-void EMTIPCWinPipeHandler<true>::connected()
+void EMTIPCWinPipe<true>::connected()
 {
-	uint32_t * buf = (uint32_t *)::malloc(sizeof(uint32_t));
-	*buf = mHost->q()->EMTIPC::connect(EMTIPC::kInvalidConn);
-	mPipe->send(buf, sizeof(*buf));
-}
-
-void EMTIPCWinPipeHandler<false>::received(void * buf, const uint32_t len)
-{
-	mHost->q()->EMTIPC::connect(*(uint32_t *)buf);
+	mHost->connect();
 }
 
 template<bool SERVER>
-bool EMTIPCWinPipeHandler<SERVER>::connect()
+void EMTIPCWinPipe<SERVER>::received(void * buf, const uint32_t len)
+{
+	mHost->received(buf, len);
+}
+
+template<bool SERVER>
+void EMTIPCWinPipe<SERVER>::sent(void * buf, const uint32_t len)
+{
+	::free(buf);
+}
+
+template<bool SERVER>
+bool EMTIPCWinPipe<SERVER>::connect()
 {
 	wchar_t fullname[MAX_PATH] = L"\\\\.\\pipe\\";
 	wcscat_s(fullname, mHost->name());
@@ -105,20 +157,26 @@ bool EMTIPCWinPipeHandler<SERVER>::connect()
 	return connect(fullname);
 }
 
-bool EMTIPCWinPipeHandler<true>::connect(const wchar_t * pName)
+bool EMTIPCWinPipe<true>::connect(const wchar_t * pName)
 {
 	return mPipe->listen(pName);
 }
 
-bool EMTIPCWinPipeHandler<false>::connect(const wchar_t * pName)
+bool EMTIPCWinPipe<false>::connect(const wchar_t * pName)
 {
 	return mPipe->connect(pName);
 }
 
 template<bool SERVER>
-void EMTIPCWinPipeHandler<SERVER>::disconnect()
+void EMTIPCWinPipe<SERVER>::disconnect()
 {
 	mPipe->disconnect();
+}
+
+template<bool SERVER>
+void EMTIPCWinPipe<SERVER>::send(void * buf, const uint32_t len)
+{
+	mPipe->send(buf, len);
 }
 
 EMTIPCWinPrivate::~EMTIPCWinPrivate()
@@ -149,6 +207,62 @@ const wchar_t * EMTIPCWinPrivate::name() const
 	return mName;
 }
 
+void EMTIPCWinPrivate::connect()
+{
+	EMTIPCWinPacket_Connect * np = new EMTIPCWinPacket_Connect;
+	np->connId = EMTCore_connect(&mCore, EMTIPC::kInvalidConn);
+	np->processId = ::GetCurrentProcessId();
+	np->eventHandle = (uintptr_t)mEventL;
+
+	mPipe->send(np, sizeof(*np));
+}
+
+void EMTIPCWinPrivate::disconnect()
+{
+	disconnected();
+
+	EMTCore_disconnect(&mCore);
+
+	if (mEventR != INVALID_HANDLE_VALUE)
+	{
+		::CloseHandle(mEventR);
+		mEventR = INVALID_HANDLE_VALUE;
+	}
+}
+
+void EMTIPCWinPrivate::received(void * buf, const uint32_t len)
+{
+	switch (((EMTIPCWinPacket *)buf)->packet_uri)
+	{
+	case kEMTIPCWinPacket_Connect:
+	{
+		EMTIPCWinPacket_Connect * p = (EMTIPCWinPacket_Connect *)buf;
+		EMTIPCWinPacket_ConnectACK * np = new EMTIPCWinPacket_ConnectACK;
+
+		HANDLE procL = ::GetCurrentProcess();
+		HANDLE procR = ::OpenProcess(PROCESS_DUP_HANDLE, FALSE, p->processId);
+		::DuplicateHandle(procR, (HANDLE)p->eventHandle, procL, &mEventR, EVENT_MODIFY_STATE, FALSE, 0);
+		::DuplicateHandle(procL, mEventL, procR, (LPHANDLE)&np->eventHandle, EVENT_MODIFY_STATE, FALSE, 0);
+		::CloseHandle(procR);
+
+		mPipe->send(np, sizeof(*np));
+
+		EMTCore_connect(&mCore, p->connId);
+
+		connected();
+		break;
+	}
+	case kEMTIPCWinPacket_ConnectACK:
+	{
+		EMTIPCWinPacket_ConnectACK * p = (EMTIPCWinPacket_ConnectACK *)buf;
+		mEventR = (HANDLE)p->eventHandle;
+
+		connected();
+		break;
+	}
+	}
+}
+
 void EMTIPCWinPrivate::sys_notified()
 {
 	notified();
@@ -162,32 +276,6 @@ void * EMTIPCPrivate::allocSys(EMTIPCPrivate * pThis, const uint32_t uLen)
 void EMTIPCPrivate::freeSys(EMTIPCPrivate * pThis, void * pMem)
 {
 	::free(pMem);
-}
-
-uint32_t EMTIPCPrivate::sys_connect(uint32_t uConnId)
-{
-	EMTIPCWinPrivate * sys = (EMTIPCWinPrivate *)this;
-	return EMTCore_connect(&mCore, uConnId, ::GetCurrentProcessId(), (uintptr_t)sys->mEventL);
-}
-
-void EMTIPCPrivate::sys_connected(const uint64_t uParam0, const uint64_t uParam1)
-{
-	EMTIPCWinPrivate * sys = (EMTIPCWinPrivate *)this;
-
-	HANDLE procR = ::OpenProcess(PROCESS_DUP_HANDLE, FALSE, (DWORD)uParam0);
-	::DuplicateHandle(procR, (HANDLE)uParam1, ::GetCurrentProcess(), &sys->mEventR, EVENT_MODIFY_STATE, FALSE, 0);
-	::CloseHandle(procR);
-}
-
-void EMTIPCPrivate::sys_disconnected()
-{
-	EMTIPCWinPrivate * sys = (EMTIPCWinPrivate *)this;
-
-	if (sys->mEventR != INVALID_HANDLE_VALUE)
-	{
-		::CloseHandle(sys->mEventR);
-		sys->mEventR = INVALID_HANDLE_VALUE;
-	}
 }
 
 void EMTIPCPrivate::sys_notify()
@@ -214,14 +302,14 @@ bool EMTIPCWin::connect(bool isServer)
 {
 	EMT_D(EMTIPCWin);
 
-	if (d->mPipeHandler)
+	if (d->mPipe)
 		return false;
 
-	std::unique_ptr<IEMTIPCWinPipeHandler, IEMTUnknown_Delete> pipeHandler(isServer ? (IEMTIPCWinPipeHandler *)new EMTIPCWinPipeHandler<true>(d) : new EMTIPCWinPipeHandler<false>(d));
+	std::unique_ptr<IEMTIPCWinPipe> pipeHandler(isServer ? (IEMTIPCWinPipe *)new EMTIPCWinPipe<true>(d) : new EMTIPCWinPipe<false>(d));
 
 	const bool ret = pipeHandler->connect();
 	if (ret)
-		d->mPipeHandler.swap(pipeHandler);
+		d->mPipe.swap(pipeHandler);
 
 	return ret;
 }
@@ -230,8 +318,8 @@ void EMTIPCWin::disconnect()
 {
 	EMT_D(EMTIPCWin);
 
-	if (!d->mPipeHandler)
+	if (!d->mPipe)
 		return;
 
-	d->mPipeHandler->disconnect();
+	d->mPipe->disconnect();
 }

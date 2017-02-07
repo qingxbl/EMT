@@ -29,7 +29,7 @@ struct _EMTCOREOPS
 	uint32_t (*connId)(PEMTCORE pThis);
 	uint32_t (*isConnected)(PEMTCORE pThis);
 
-	uint32_t (*connect)(PEMTCORE pThis, uint32_t uConnId, const uint64_t uParam0, const uint64_t uParam1);
+	uint32_t (*connect)(PEMTCORE pThis, uint32_t uConnId);
 	uint32_t (*disconnect)(PEMTCORE pThis);
 
 	void * (*alloc)(PEMTCORE pThis, const uint32_t uLen);
@@ -49,9 +49,6 @@ struct _EMTCOREOPS
 struct _EMTCORESINKOPS
 {
 	/* callback */
-	void (*connected)(void * pThis, const uint64_t uParam0, const uint64_t uParam1);
-	void (*disconnected)(void * pThis);
-
 	void (*received)(void * pThis, void * pMem, const uint64_t uParam0, const uint64_t uParam1);
 
 	/* support */
@@ -79,7 +76,6 @@ struct _EMTCORE
 	volatile uint32_t * pPeerIdL;
 	volatile uint32_t * pPeerIdR;
 	uint32_t uConnId;
-	uint32_t uFlags;
 
 	void * pMem;
 	void * pMemEnd;
@@ -98,7 +94,7 @@ EMTIMPL_CALL void EMTCore_construct(PEMTCORE pThis, PEMTCORESINKOPS pSinkOps, vo
 EMTIMPL_CALL void EMTCore_destruct(PEMTCORE pThis);
 EMTIMPL_CALL uint32_t EMTCore_connId(PEMTCORE pThis);
 EMTIMPL_CALL uint32_t EMTCore_isConnected(PEMTCORE pThis);
-EMTIMPL_CALL uint32_t EMTCore_connect(PEMTCORE pThis, uint32_t uConnId, const uint64_t uParam0, const uint64_t uParam1);
+EMTIMPL_CALL uint32_t EMTCore_connect(PEMTCORE pThis, uint32_t uConnId);
 EMTIMPL_CALL uint32_t EMTCore_disconnect(PEMTCORE pThis);
 EMTIMPL_CALL void * EMTCore_alloc(PEMTCORE pThis, const uint32_t uLen);
 EMTIMPL_CALL void EMTCore_free(PEMTCORE pThis, void * pMem);

@@ -46,15 +46,11 @@ enum
 
 	kEMTCoreSend = 0,
 	kEMTCorePartial = 1,
-	kEMTCoreConnect = 2,
-	kEMTCoreDisconnect = 3,
 	kEMTCoreTypeMask = (1 << 2) - 1,
 
-	kEMTCoreFlagConnect = 1,
-
 	kEMTCoreLargestBlockLength = 1024 * 256,
-	kEMTCoreLargestBlockCount = 4 * 8,
-	kEMTCoreLargestBlockLimit = 1,
+	kEMTCoreLargestBlockCount = 4 * 4,
+	kEMTCoreLargestBlockLimit = 4,
 	KEMTCorePartialMemLength = kEMTCoreLargestBlockLength * kEMTCoreLargestBlockLimit,
 	kEMTCorePartialSlots = 10,
 };
@@ -67,8 +63,8 @@ struct _EMTCOREMEMMETA
 
 const EMTMULTIPOOLCONFIG sMultiPoolConfig[] =
 {
-	{ 32, 16 * 1024, 4 },
-	{ 512, 2 * 1024 * 4, 4 },
+	{ 32, 32 * 1024, 4 },
+	{ 4 * 1024, 256 * 6, 4 },
 	{ kEMTCoreLargestBlockLength, kEMTCoreLargestBlockCount, kEMTCoreLargestBlockLimit }
 };
 
@@ -79,7 +75,7 @@ static int32_t EMTCore_isSharedMemory(PEMTCORE pThis, void * pMem)
 	return pMem >= pThis->pMem && pMem < pThis->pMemEnd;
 }
 
-static void EMTCore_sendAll(PEMTCORE pThis, void * pMem, const uint64_t uFlags, const uint64_t uParam0, const uint64_t uParam1, const uint32_t bNotify)
+static void EMTCore_sendAll(PEMTCORE pThis, void * pMem, const uint64_t uFlags, const uint64_t uParam0, const uint64_t uParam1)
 {
 	PEMTCOREBLOCKMETA blockMeta = (PEMTCOREBLOCKMETA)EMTMultiPool_alloc(&pThis->sMultiPool, sizeof(EMTCOREBLOCKMETA));
 	blockMeta->uToken = pMem ? EMTMultiPool_transfer(&pThis->sMultiPool, pMem, *pThis->pPeerIdR) : 0;
@@ -87,7 +83,7 @@ static void EMTCore_sendAll(PEMTCORE pThis, void * pMem, const uint64_t uFlags, 
 	blockMeta->uParam0 = uParam0;
 	blockMeta->uParam1 = uParam1;
 
-	if (EMTLinkList_prepend(pThis->pConnHeadR, &blockMeta->sNext) == 0 && bNotify)
+	if (EMTLinkList_prepend(pThis->pConnHeadR, &blockMeta->sNext) == 0)
 		pThis->pSinkOps->notify(pThis->pSinkCtx);
 }
 
@@ -96,22 +92,6 @@ static void * EMTCore_allocSys(PEMTCORE pThis, const uint32_t uLen)
 	PEMTCOREMEMMETA memMeta = (PEMTCOREMEMMETA)pThis->pSinkOps->allocSys(pThis->pSinkCtx, uLen + sizeof(EMTCOREMEMMETA));
 	memMeta->uLen = uLen;
 	return memMeta + 1;
-}
-
-static uint32_t EMTCore_connected(PEMTCORE pThis, PEMTCOREBLOCKMETA pBlockMeta)
-{
-	pThis->pSinkOps->connected(pThis->pSinkCtx, pBlockMeta->uParam0, pBlockMeta->uParam1);
-	pThis->uFlags |= kEMTCoreFlagConnect;
-
-	return 1;
-}
-
-static uint32_t EMTCore_disconnected(PEMTCORE pThis, PEMTCOREBLOCKMETA pBlockMeta)
-{
-	pThis->uFlags &= ~kEMTCoreFlagConnect;
-	pThis->pSinkOps->disconnected(pThis->pSinkCtx);
-
-	return 1;
 }
 
 static uint32_t EMTCore_pend(PEMTCORE pThis, PEMTCOREBLOCKMETA pBlockMeta)
@@ -172,7 +152,7 @@ static void EMTCore_sendPartialStart(PEMTCORE pThis, void * pMem, const uint64_t
 	partialMeta->uStart = EMTCore_length(pThis, pMem);
 	partialMeta->uTokenCount = 0;
 
-	EMTCore_sendAll(pThis, partialMeta, kEMTCorePartial, uParam0, uParam1, 1);
+	EMTCore_sendAll(pThis, partialMeta, kEMTCorePartial, uParam0, uParam1);
 }
 
 static uint32_t EMTCore_receivedPartialStart(PEMTCORE pThis, PEMTCOREBLOCKMETA pBlockMeta, PEMTCOREPARTIALMETA pPartialMeta)
@@ -180,7 +160,7 @@ static uint32_t EMTCore_receivedPartialStart(PEMTCORE pThis, PEMTCOREBLOCKMETA p
 	pPartialMeta->pReceive = (uintptr_t)EMTCore_allocSys(pThis, pPartialMeta->uStart);
 	pPartialMeta->uStart = 0;
 
-	EMTCore_sendAll(pThis, pPartialMeta, kEMTCorePartial, 0, 0, 1);
+	EMTCore_sendAll(pThis, pPartialMeta, kEMTCorePartial, 0, 0);
 	return 0;
 }
 
@@ -208,7 +188,7 @@ static uint32_t EMTCore_sendPartialData(PEMTCORE pThis, PEMTCOREBLOCKMETA pBlock
 		EMTCore_free(pThis, mem);
 
 	if (pPartialMeta->uTokenCount != 0)
-		EMTCore_sendAll(pThis, pPartialMeta, kEMTCorePartial, 0, 0, 1);
+		EMTCore_sendAll(pThis, pPartialMeta, kEMTCorePartial, 0, 0);
 	else
 		pThis->pSinkOps->queue(pThis->pSinkCtx, pBlockMeta);
 
@@ -235,7 +215,7 @@ static uint32_t EMTCore_receivedPartialData(PEMTCORE pThis, PEMTCOREBLOCKMETA pB
 	if (pPartialMeta->uStart != memLen)
 	{
 		pPartialMeta->uTokenCount = 0;
-		EMTCore_sendAll(pThis, pPartialMeta, kEMTCorePartial, 0, 0, 1);
+		EMTCore_sendAll(pThis, pPartialMeta, kEMTCorePartial, 0, 0);
 	}
 	else
 	{
@@ -273,10 +253,6 @@ static uint32_t EMTCore_process(PEMTCORE pThis, PEMTCOREBLOCKMETA pBlockMeta)
 		return EMTCore_received(pThis, pBlockMeta);
 	case kEMTCorePartial:
 		return EMTCore_receivedPartial(pThis, pBlockMeta);
-	case kEMTCoreConnect:
-		return EMTCore_connected(pThis, pBlockMeta);
-	case kEMTCoreDisconnect:
-		return EMTCore_disconnected(pThis, pBlockMeta);
 	default:
 		return 1;
 	}
@@ -289,7 +265,6 @@ void EMTCore_construct(PEMTCORE pThis, PEMTCORESINKOPS pSinkOps, void * pSinkCtx
 	pThis->pSinkOps = pSinkOps;
 	pThis->pSinkCtx = pSinkCtx;
 	pThis->uConnId = kEMTCoreInvalidConn;
-	pThis->uFlags = 0;
 
 	pThis->sMultiPool.uPoolCount = sizeof(pThis->sMultiPoolConfig) / sizeof(EMTMULTIPOOLCONFIG);
 	for (i = 0; i < pThis->sMultiPool.uPoolCount; ++i)
@@ -327,10 +302,10 @@ uint32_t EMTCore_connId(PEMTCORE pThis)
 
 uint32_t EMTCore_isConnected(PEMTCORE pThis)
 {
-	return pThis->uFlags & kEMTCoreFlagConnect;
+	return pThis->pPeerIdL && pThis->pPeerIdR && *pThis->pPeerIdL && *pThis->pPeerIdR;
 }
 
-uint32_t EMTCore_connect(PEMTCORE pThis, uint32_t uConnId, const uint64_t uParam0, const uint64_t uParam1)
+uint32_t EMTCore_connect(PEMTCORE pThis, uint32_t uConnId)
 {
 	const int32_t isNewConn = uConnId == kEMTCoreInvalidConn;
 	PEMTCORECONNMETA connMeta = (PEMTCORECONNMETA)(isNewConn ? EMTMultiPool_alloc(&pThis->sMultiPool, sizeof(EMTCORECONNMETA)) : EMTMultiPool_take(&pThis->sMultiPool, uConnId));
@@ -349,14 +324,6 @@ uint32_t EMTCore_connect(PEMTCORE pThis, uint32_t uConnId, const uint64_t uParam
 		EMTLinkList_init(pThis->pConnHeadR);
 	}
 
-	EMTCore_sendAll(pThis, 0, kEMTCoreConnect, uParam0, uParam1, 0);
-
-	if (!isNewConn)
-	{
-		EMTCore_notified(pThis);
-		pThis->pSinkOps->notify(pThis->pSinkCtx);
-	}
-
 	return pThis->uConnId;
 }
 
@@ -366,7 +333,6 @@ uint32_t EMTCore_disconnect(PEMTCORE pThis)
 		return 0;
 
 	*pThis->pPeerIdL = 0;
-	EMTCore_sendAll(pThis, 0, kEMTCoreDisconnect, 0, 0, 1);
 
 	return 0;
 }
@@ -413,7 +379,7 @@ void * EMTCore_take(PEMTCORE pThis, const uint32_t uToken)
 void EMTCore_send(PEMTCORE pThis, void * pMem, const uint64_t uParam0, const uint64_t uParam1)
 {
 	if (EMTCore_isSharedMemory(pThis, pMem))
-		EMTCore_sendAll(pThis, pMem, kEMTCoreSend, uParam0, uParam1, 1);
+		EMTCore_sendAll(pThis, pMem, kEMTCoreSend, uParam0, uParam1);
 	else
 		EMTCore_sendPartialStart(pThis, pMem, uParam0, uParam1);
 }

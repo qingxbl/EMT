@@ -20,10 +20,10 @@ public:
 	void init(IEMTThread * pThread, IEMTShareMemory * pShareMemory, IEMTIPCSink * pSink);
 
 	void notified();
+	void connected();
+	void disconnected();
 
 private: // EMTCORESINKOPS
-	static void connected(EMTIPCPrivate * pThis, const uint64_t uParam0, const uint64_t uParam1);
-	static void disconnected(EMTIPCPrivate * pThis);
 	static void received(EMTIPCPrivate * pThis, void * pMem, const uint64_t uParam0, const uint64_t uParam1);
 	static void * getShareMemory(EMTIPCPrivate * pThis, const uint32_t uLen);
 	static void releaseShareMemory(EMTIPCPrivate * pThis, void * pMem);
@@ -35,10 +35,6 @@ private: // EMTCORESINKOPS
 	static PEMTCORESINKOPS emtCoreSink();
 
 private:
-	uint32_t sys_connect(uint32_t uConnId);
-
-	void sys_connected(const uint64_t uParam0, const uint64_t uParam1);
-	void sys_disconnected();
 	void sys_notify();
 
 protected:

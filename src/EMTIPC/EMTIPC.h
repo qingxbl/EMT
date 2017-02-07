@@ -37,8 +37,6 @@ public:
 	uint32_t connId();
 	bool isConnected();
 
-	uint32_t connect(uint32_t uConnId);
-	uint32_t disconnect();
 	void * alloc(const uint32_t uLen);
 	void free(void * pMem);
 	uint32_t length(void * pMem);

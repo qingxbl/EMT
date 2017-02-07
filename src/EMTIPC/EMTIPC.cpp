@@ -30,18 +30,14 @@ void EMTIPCPrivate::notified()
 	EMTCore_notified(&mCore);
 }
 
-void EMTIPCPrivate::connected(EMTIPCPrivate * pThis, const uint64_t uParam0, const uint64_t uParam1)
+void EMTIPCPrivate::connected()
 {
-	pThis->sys_connected(uParam0, uParam1);
-
-	pThis->mSink->connected();
+	mSink->connected();
 }
 
-void EMTIPCPrivate::disconnected(EMTIPCPrivate * pThis)
+void EMTIPCPrivate::disconnected()
 {
-	pThis->sys_disconnected();
-
-	pThis->mSink->disconnected();
+	mSink->disconnected();
 }
 
 void EMTIPCPrivate::received(EMTIPCPrivate * pThis, void * pMem, const uint64_t uParam0, const uint64_t uParam1)
@@ -73,8 +69,6 @@ PEMTCORESINKOPS EMTIPCPrivate::emtCoreSink()
 {
 	static EMTCORESINKOPS sOps =
 	{
-		(void (*)(void * pThis, const uint64_t uParam0, const uint64_t uParam1))connected,
-		(void (*)(void * pThis))disconnected,
 		(void (*)(void * pThis, void * pMem, const uint64_t uParam0, const uint64_t uParam1))received,
 		(void * (*)(void * pThis, const uint32_t uLen))getShareMemory,
 		(void (*)(void * pThis, void * pMem))releaseShareMemory,
@@ -128,18 +122,6 @@ bool EMTIPC::isConnected()
 {
 	EMT_D(EMTIPC);
 	return EMTCore_isConnected(&d->mCore) != 0;
-}
-
-uint32_t EMTIPC::connect(uint32_t uConnId)
-{
-	EMT_D(EMTIPC);
-	return d->sys_connect(uConnId);
-}
-
-uint32_t EMTIPC::disconnect()
-{
-	EMT_D(EMTIPC);
-	return EMTCore_disconnect(&d->mCore);
 }
 
 void * EMTIPC::alloc(const uint32_t uLen)
