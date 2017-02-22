@@ -400,7 +400,8 @@ void EMTCore_notified(PEMTCORE pThis)
 
 void EMTCore_queued(PEMTCORE pThis, void * pMem)
 {
-	EMTCore_process(pThis, (PEMTCOREBLOCKMETA)pMem);
+	if (EMTCore_process(pThis, (PEMTCOREBLOCKMETA)pMem) != 0)
+		EMTMultiPool_free(&pThis->sMultiPool, pMem);
 }
 
 PCEMTCOREOPS emtCore(void)
