@@ -241,10 +241,12 @@ void EMTIPCWinPrivate::received(void * buf, const uint32_t len)
 
 		HANDLE procL = ::GetCurrentProcess();
 		HANDLE procR = ::OpenProcess(PROCESS_DUP_HANDLE, FALSE, p->processId);
+		HANDLE eventL2R = INVALID_HANDLE_VALUE;
 		::DuplicateHandle(procR, (HANDLE)p->eventHandle, procL, &mEventR, EVENT_MODIFY_STATE, FALSE, 0);
-		::DuplicateHandle(procL, mEventL, procR, (LPHANDLE)&np->eventHandle, EVENT_MODIFY_STATE, FALSE, 0);
+		::DuplicateHandle(procL, mEventL, procR, &eventL2R, EVENT_MODIFY_STATE, FALSE, 0);
 		::CloseHandle(procR);
 
+		np->eventHandle = (uintptr_t)eventL2R;
 		mPipe->send(np, sizeof(*np));
 
 		EMTCore_connect(&mCore, p->connId);

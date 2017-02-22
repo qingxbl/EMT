@@ -14,6 +14,12 @@ BEGIN_NAMESPACE_ANONYMOUS
 enum
 {
 	kInvalidStartPoint = ~0U,
+
+	kWaitType_None = 0,
+	kWaitType_Object = 1 << 0,
+	kWaitType_Alertable = 1 << 1,
+	kWaitType_Msg = 1 << 2,
+	kWaitType_All = kWaitType_Object + kWaitType_Alertable + kWaitType_Msg,
 };
 
 class EMTWorkThread : public IEMTThread
@@ -44,7 +50,7 @@ protected: // IEMTThread
 	virtual void delay(IEMTRunnable *runnable, const uint64_t time, const bool repeat);
 
 private:
-	void queue_entry();
+	static void NTAPI queue_entry(ULONG_PTR Parameter);
 	static void APIENTRY timer_entry(LPVOID lpArgToCompletionRoutine, DWORD dwTimerLowValue, DWORD dwTimerHighValue);
 
 	static bool run(IEMTRunnable * runnable);
@@ -60,22 +66,18 @@ private:
 	uint32_t mStartPoint;
 
 	EMTLINKLISTNODE2 mQueued;
-	HANDLE mQueuedEvent;
 };
 
 EMTWorkThread::EMTWorkThread()
 	: mThreadId(::GetCurrentThreadId())
 	, mRunning(false)
 	, mStartPoint(0)
-	, mQueuedEvent(::CreateEventW(NULL, FALSE, FALSE, NULL))
 {
 	::DuplicateHandle(::GetCurrentProcess(), ::GetCurrentThread(), ::GetCurrentProcess(), &mThread, 0, FALSE, DUPLICATE_SAME_ACCESS);
 
 	mRegisteredWaitable.reserve(MAXIMUM_WAIT_OBJECTS);
 
 	EMTLinkList2_init(&mQueued);
-
-	registerWaitable(createEMTWaitable(std::bind(&EMTWorkThread::queue_entry, this), mQueuedEvent));
 }
 
 EMTWorkThread::~EMTWorkThread()
@@ -102,7 +104,7 @@ uint32_t EMTWorkThread::exec()
 
 	mRunning = true;
 
-	bool breakAlertable = false;
+	uint32_t waitType = kWaitType_All;
 	HANDLE waitHandles[MAXIMUM_WAIT_OBJECTS << 1];
 
 	while (mRunning)
@@ -116,11 +118,13 @@ uint32_t EMTWorkThread::exec()
 			mStartPoint = 0;
 		}
 
-		const DWORD time = !breakAlertable ? INFINITE : 0;
-		const DWORD flags = !breakAlertable ? MWMO_ALERTABLE : 0;
-		const DWORD rc = MsgWaitForMultipleObjectsEx(count, waitHandles + mStartPoint, time, QS_ALLEVENTS, flags);
+		const DWORD milliseconds = waitType == kWaitType_All ? INFINITE : 0;
+		const DWORD waitCount = waitType & kWaitType_Object ? count : 0;
+		const DWORD wakeMask = waitType & kWaitType_Msg ? QS_ALLEVENTS : 0;
+		const DWORD flags = waitType & kWaitType_Alertable ? MWMO_ALERTABLE : 0;
+		const DWORD rc = ::MsgWaitForMultipleObjectsEx(waitCount, waitHandles + mStartPoint, milliseconds, wakeMask, flags);
 		const DWORD wokenObject = rc - WAIT_OBJECT_0;
-		if (wokenObject >= 0 && wokenObject < count)
+		if (wokenObject >= 0 && wokenObject < waitCount)
 		{
 			IEMTWaitable * waitable = mRegisteredWaitable[(wokenObject + mStartPoint) % count];
 			if (run(waitable))
@@ -128,8 +132,10 @@ uint32_t EMTWorkThread::exec()
 
 			if (mStartPoint != kInvalidStartPoint)
 				mStartPoint = wokenObject + 1;
+
+			waitType &= ~kWaitType_Object;
 		}
-		else if (wokenObject == count)
+		else if (wokenObject == waitCount)
 		{
 			MSG msg;
 			while (::PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
@@ -137,9 +143,12 @@ uint32_t EMTWorkThread::exec()
 				::TranslateMessage(&msg);
 				::DispatchMessage(&msg);
 			}
+
+			waitType &= ~kWaitType_Msg;
 		}
 		else if (rc == WAIT_IO_COMPLETION)
 		{
+			waitType &= ~kWaitType_Alertable;
 			// continue;
 		}
 		else if (rc == WAIT_TIMEOUT)
@@ -155,7 +164,8 @@ uint32_t EMTWorkThread::exec()
 			// assert(false);
 		}
 
-		breakAlertable = rc == WAIT_IO_COMPLETION;
+		if (rc == WAIT_TIMEOUT || waitType == kWaitType_None)
+			waitType = kWaitType_All;
 	}
 
 	return 0;
@@ -193,7 +203,7 @@ void EMTWorkThread::unregisterWaitable(IEMTWaitable * waitable)
 void EMTWorkThread::queue(IEMTRunnable * runnable)
 {
 	if (EMTLinkList2_prepend(&mQueued, &(new QueuedItem(runnable))->node) == NULL)
-		::SetEvent(mQueuedEvent);
+		::QueueUserAPC(EMTWorkThread::queue_entry, mThread, (ULONG_PTR)this);
 }
 
 void EMTWorkThread::delay(IEMTRunnable * runnable, const uint64_t time, const bool repeat)
@@ -201,9 +211,10 @@ void EMTWorkThread::delay(IEMTRunnable * runnable, const uint64_t time, const bo
 
 }
 
-void EMTWorkThread::queue_entry()
+void EMTWorkThread::queue_entry(ULONG_PTR Parameter)
 {
-	EMTLINKLISTNODE2 * node = EMTLinkList2_detach(&mQueued);
+	EMTWorkThread * pThis = (EMTWorkThread *)Parameter;
+	EMTLINKLISTNODE2 * node = EMTLinkList2_detach(&pThis->mQueued);
 	node = EMTLinkList2_reverse(node);
 
 	while (node)
