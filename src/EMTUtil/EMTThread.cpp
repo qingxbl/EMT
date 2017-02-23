@@ -50,6 +50,8 @@ protected: // IEMTThread
 	virtual void delay(IEMTRunnable *runnable, const uint64_t time, const bool repeat);
 
 private:
+	void runQueued();
+
 	static void NTAPI queue_entry(ULONG_PTR Parameter);
 	static void APIENTRY timer_entry(LPVOID lpArgToCompletionRoutine, DWORD dwTimerLowValue, DWORD dwTimerHighValue);
 
@@ -148,6 +150,7 @@ uint32_t EMTWorkThread::exec()
 		}
 		else if (rc == WAIT_IO_COMPLETION)
 		{
+			runQueued();
 			waitType &= ~kWaitType_Alertable;
 			// continue;
 		}
@@ -203,7 +206,7 @@ void EMTWorkThread::unregisterWaitable(IEMTWaitable * waitable)
 void EMTWorkThread::queue(IEMTRunnable * runnable)
 {
 	if (EMTLinkList2_prepend(&mQueued, &(new QueuedItem(runnable))->node) == NULL)
-		::QueueUserAPC(EMTWorkThread::queue_entry, mThread, (ULONG_PTR)this);
+		::QueueUserAPC(EMTWorkThread::queue_entry, mThread, NULL);
 }
 
 void EMTWorkThread::delay(IEMTRunnable * runnable, const uint64_t time, const bool repeat)
@@ -211,10 +214,9 @@ void EMTWorkThread::delay(IEMTRunnable * runnable, const uint64_t time, const bo
 
 }
 
-void EMTWorkThread::queue_entry(ULONG_PTR Parameter)
+void EMTWorkThread::runQueued()
 {
-	EMTWorkThread * pThis = (EMTWorkThread *)Parameter;
-	EMTLINKLISTNODE2 * node = EMTLinkList2_detach(&pThis->mQueued);
+	EMTLINKLISTNODE2 * node = EMTLinkList2_detach(&mQueued);
 	node = EMTLinkList2_reverse(node);
 
 	while (node)
@@ -225,6 +227,11 @@ void EMTWorkThread::queue_entry(ULONG_PTR Parameter)
 		run(q->runnable);
 		delete q;
 	}
+}
+
+void EMTWorkThread::queue_entry(ULONG_PTR Parameter)
+{
+
 }
 
 void EMTWorkThread::timer_entry(LPVOID lpArgToCompletionRoutine, DWORD dwTimerLowValue, DWORD dwTimerHighValue)
