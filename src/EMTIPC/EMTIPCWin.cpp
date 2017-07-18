@@ -22,6 +22,8 @@ template <class T>
 struct EMTIPCWinPacketT : public EMTIPCWinPacket
 {
 	EMTIPCWinPacketT() : EMTIPCWinPacket(T::uri, sizeof(T)) { }
+
+	static T * create() { return new (::malloc(sizeof(T))) T; }
 };
 
 enum
@@ -209,7 +211,7 @@ const wchar_t * EMTIPCWinPrivate::name() const
 
 void EMTIPCWinPrivate::connect()
 {
-	EMTIPCWinPacket_Connect * np = new EMTIPCWinPacket_Connect;
+	EMTIPCWinPacket_Connect * np = EMTIPCWinPacket_Connect::create();
 	np->connId = EMTCore_connect(&mCore, EMTIPC::kInvalidConn);
 	np->processId = ::GetCurrentProcessId();
 	np->eventHandle = (uintptr_t)mEventL;
@@ -237,7 +239,7 @@ void EMTIPCWinPrivate::received(void * buf, const uint32_t len)
 	case kEMTIPCWinPacket_Connect:
 	{
 		EMTIPCWinPacket_Connect * p = (EMTIPCWinPacket_Connect *)buf;
-		EMTIPCWinPacket_ConnectACK * np = new EMTIPCWinPacket_ConnectACK;
+		EMTIPCWinPacket_ConnectACK * np = EMTIPCWinPacket_ConnectACK::create();
 
 		HANDLE procL = ::GetCurrentProcess();
 		HANDLE procR = ::OpenProcess(PROCESS_DUP_HANDLE, FALSE, p->processId);
